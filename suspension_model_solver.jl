@@ -150,6 +150,7 @@ end
 
 # SOLVING
 Suspension_Sim_Prob = ODEProblem(suspension_model,init_state,tspan,params)
+# @timev # Timer macro
 Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
 # Alternate Solvers Tested when encountering stiffness issues
 # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,AutoTsit5(Rosenbrock23()))
