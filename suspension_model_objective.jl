@@ -5,17 +5,50 @@ using Distributions
 using DifferentialEquations
 using PyPlot
 
+"""
+
+### Syntax
+  `suspension_model_objective(state_vec::Array{Float64,1}; tire_thk::Float64, tire_OD::Float64, susp_travel::Float64, m1::Float64, m2::Float64, x_vel::Float64, time_lim::Float64, num_sims::Integer, plotting::Bool)`
+
+  `suspension_model_objective(state_vec::Array{Float64,1})`
+
+### Description
+Runs a phsyical simulation of a suspended bicycle wheel traversing rough ground and returns averaged values for the "ground following" and "ride comfort" objectives. Ground following is defined as the mean distance between the tire and ground, normalized by the tire thickness to generate a value of O(1). Ride comfort is defined as the RMS vertical acceleration of the bicycle frame, subtracting gravity.
+
+### Arguments
+  `state_vec::Array{Float64,1}` - array of state variables\n
+      k1_0, [N/m], default: 6000.0
+      k2_0, [N/m], default: 20000.0
+      bRH, [N-s/m], default: 1000.0
+      bRL, [N-s/m], default: 1000.0
+      bCL, [N-s/m], default: 1000.0
+      bCH, [N-s/m], default: 1000.0
+      y_dotcritR, [m/s], default: 2.0
+      y_dotcritC, [m/s], default: -2.0
+
+### Keyword Arguments
+  `tire_thk::Float64` -> tire depth (travel), [m], default: 0.0635\n
+  `tire_OD::Float64` -> tire diameter/ground length scale, [m], default: 0.711\n
+  `susp_travel::Float64` -> suspension travel, [m], default: 0.2\n
+  `m1::Float64` -> half of bicycle sprung mass (rider + frame), [kg], default: 50.0\n
+  `m2::Float64` -> bicycle unsprung mass per wheel, [kg], default: 5.0\n
+  `x_vel::Float64` -> horizontal velocity, [m/s], default: 10.0\n
+  `time_lim::Float64` -> duration of simulation, [s], default: 30.0\n
+  `num_sims::Integer` -> number of iterations to average objectives, default: 10\n
+  `plotting::Bool` -> whether to generate plots from a single simulation run or generate averaged objective values over several simulations, default: false
+
+"""
 function suspension_model_objective(
-  state_vec = [6000.0, 20000.0, 1000.0, 1000.0, 1000.0, 1000.0, 2.0, -2.0];
-  tire_thk = 0.0635, # [m]
-  tire_OD = 0.711, # [m]
-  susp_travel = 0.2, # [m]
-  m1 = 50, # [kg]
-  m2 = 5, # [kg]
-  x_vel = 10.0, # [m/s], horizontal velocity
-  time_lim = 30.0, # [s], real time per Simulation
-  num_sims = 10, # number of iterations to average objectives over
-  plotting = false
+  state_vec::Array{Float64,1} = [6000.0, 20000.0, 1000.0, 1000.0, 1000.0, 1000.0, 2.0, -2.0];
+  tire_thk::Float64 = 0.0635, # [m]
+  tire_OD::Float64 = 0.711, # [m]
+  susp_travel::Float64 = 0.2, # [m]
+  m1::Float64 = 50.0, # [kg]
+  m2::Float64 = 5.0, # [kg]
+  x_vel::Float64 = 10.0, # [m/s], horizontal velocity
+  time_lim::Float64 = 30.0, # [s], real time per Simulation
+  num_sims::Integer = 10, # number of iterations to average objectives over
+  plotting::Bool = false
 )
 
 k1_0 = state_vec[1] # [N/m]
