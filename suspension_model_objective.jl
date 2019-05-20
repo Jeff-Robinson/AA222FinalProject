@@ -6,23 +6,26 @@ using DifferentialEquations
 using PyPlot
 
 function suspension_model_objective(
+  state_vec = [6000.0, 20000.0, 1000.0, 1000.0, 1000.0, 1000.0, 2.0, -2.0];
   tire_thk = 0.0635, # [m]
   tire_OD = 0.711, # [m]
   susp_travel = 0.2, # [m]
   m1 = 50, # [kg]
   m2 = 5, # [kg]
-  k1_0 = 6000.0, # [N/m]
-  k2_0 = 20000.0, # [N/m]
-  bRH = 1000.0, # [N-s/m]
-  bRL = 1000.0, # [N-s/m]
-  bCL = 1000.0, # [N-s/m]
-  bCH = 1000.0, # [N-s/m]
-  y_dotcritR = 2.0, # y_dotcritR [m/s]
-  y_dotcritC = -2.0, # y_dotcritC [m/s]
   x_vel = 10.0, # [m/s], horizontal velocity
   time_lim = 30.0, # [s], real time per Simulation
   num_sims = 10 # number of iterations to average objectives over
 )
+
+k1_0 = state_vec[1] # [N/m]
+k2_0 = state_vec[2] # [N/m]
+bRH = state_vec[3] # [N-s/m]
+bRL = state_vec[4] # [N-s/m]
+bCL = state_vec[5] # [N-s/m]
+bCH = state_vec[6] # [N-s/m]
+y_dotcritR = state_vec[7] # y_dotcritR [m/s]
+y_dotcritC = state_vec[8] # y_dotcritC [m/s]
+
 
 """
 
@@ -38,9 +41,10 @@ Calculates the spring constant of the tire as a function of tire displacement. U
 
 """
 function k_1(k1_0, x1)
-  ramp_strength = 0.1
+  # ramp_strength = 0.1
   # k1 = k1_0 * ( ramp_strength*(-log10(10*(x1 + (1-sag_point))) - log10(10*((sag_point) - x1)) + 1.39794000867203772) + 1) #2*log10(5) + 1 )
-  k1 = k1_0 * ( exp(-10*(x1 + (1-sag_point))) + exp(10*(x1-sag_point)) + 1)
+  # k1 = k1_0 * ( exp(-10*(x1 + (1-sag_point))) + exp(10*(x1-sag_point)) + 1)
+  k1 = k1_0
   return k1
 end
 
@@ -151,9 +155,9 @@ function suspension_model(dy, y, p, t)
   m1, m2, y1_0, y2_0, k1_0, k2_0, bRH, bRL, bCL, bCH, y_dotcritR, y_dotcritC = p
   travel_zero_point = y1_0 - y2_0
   x1 = ((y[3]-y[2]) - travel_zero_point)/susp_travel
-  k1 = k_1(k1_0,x1)
+  k1 = k_1(k1_0, x1)
   x2 = (y[2]-y[1])/y2_0
-  k2 = k_2(k2_0,x2)
+  k2 = k_2(k2_0, x2)
   b1 = sm_pw_damp_coeff(bRH, bRL, bCL, bCH, y_dotcritR, y_dotcritC, y[5]-y[4])
 
   pushfirst!(moving_avg_incline, rand(Normal(0.0,50.0)))
@@ -190,7 +194,7 @@ push!(ground_following,
 push!(ride_comfort, sqrt(sum((accels.+g).^2)/length(accels))) #+ 0.01*sqrt(sum(jerks.^2)/length(jerks))
 end
 
-return sum(ground_following)/num_sims, sum(ride_comfort)/num_sims
+return [sum(ground_following)/num_sims, sum(ride_comfort)/num_sims]
 
 end
 
