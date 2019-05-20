@@ -14,7 +14,8 @@ function suspension_model_objective(
   m2 = 5, # [kg]
   x_vel = 10.0, # [m/s], horizontal velocity
   time_lim = 30.0, # [s], real time per Simulation
-  num_sims = 10 # number of iterations to average objectives over
+  num_sims = 10, # number of iterations to average objectives over
+  plotting = false
 )
 
 k1_0 = state_vec[1] # [N/m]
@@ -43,8 +44,7 @@ Calculates the spring constant of the tire as a function of tire displacement. U
 function k_1(k1_0, x1)
   # ramp_strength = 0.1
   # k1 = k1_0 * ( ramp_strength*(-log10(10*(x1 + (1-sag_point))) - log10(10*((sag_point) - x1)) + 1.39794000867203772) + 1) #2*log10(5) + 1 )
-  # k1 = k1_0 * ( exp(-10*(x1 + (1-sag_point))) + exp(10*(x1-sag_point)) + 1)
-  k1 = k1_0
+  k1 = k1_0 * ( exp(-10*(x1 + (1-sag_point))) + exp(10*(x1-sag_point)) + 1)
   return k1
 end
 
@@ -174,24 +174,97 @@ end
 
 # SOLVING
 Suspension_Sim_Prob = ODEProblem(suspension_model,init_state,tspan,params)
-# @timev # Timer macro
 
-ground_following = []
-ride_comfort = []
-for i = 1:num_sims
-Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
+if !plotting
+  ground_following = []
+  ride_comfort = []
+  for i = 1:num_sims
+  Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
 
-# Alternate Solvers Tested when encountering stiffness issues
-# Suspension_Sim_Sols = solve(Suspension_Sim_Prob,AutoTsit5(Rosenbrock23()))
-# Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Rodas5())
-# Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Rosenbrock23())
+  # Alternate Solvers Tested when encountering stiffness issues
+  # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,AutoTsit5(Rosenbrock23()))
+  # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Rodas5())
+  # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Rosenbrock23())
 
-# OBJECTIVE CRITERIA
-push!(ground_following, 
-      sum((Suspension_Sim_Sols[2,:].-Suspension_Sim_Sols[1,:])/tire_thk)
-      /length(Suspension_Sim_Sols) - 1)
-# jerks = [(accels[i]-accels[i-1])/dtime for i=2:length(accels)]
-push!(ride_comfort, sqrt(sum((accels.+g).^2)/length(accels))) #+ 0.01*sqrt(sum(jerks.^2)/length(jerks))
+  # OBJECTIVE CRITERIA
+  push!(ground_following, 
+        sum((Suspension_Sim_Sols[2,:].-Suspension_Sim_Sols[1,:])/tire_thk)
+        /length(Suspension_Sim_Sols) - 1)
+  # jerks = [(accels[i]-accels[i-1])/dtime for i=2:length(accels)]
+  push!(ride_comfort, sqrt(sum((accels.+g).^2)/length(accels))) #+ 0.01*sqrt(sum(jerks.^2)/length(jerks))
+  end
+
+else # PLOTTING
+  num_sims = 1
+  Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
+  ground_following = sum((Suspension_Sim_Sols[2,:].-Suspension_Sim_Sols[1,:])/tire_thk)/length(Suspension_Sim_Sols) - 1
+  ride_comfort = sqrt(sum((accels.+g).^2)/length(accels))
+
+  travel_zero_point = (1-sag_point)*susp_travel
+  x1 = ((Suspension_Sim_Sols[3,:] .- Suspension_Sim_Sols[2,:]) .- travel_zero_point)/susp_travel
+  x2 = (Suspension_Sim_Sols[2,:] .- Suspension_Sim_Sols[1,:])./tire_thk
+
+  fig1 = figure(0)
+  # (ax1, ax2, ax3) = fig1.subplots(nrows=3, ncols=1)
+  ax3 = fig1.subplots()
+  # ax1.plot(times,Suspension_Sim_Sols[4,:])
+  # ax1.set_title("Wheel Motion Rate, [m/s]")
+  # ax2.plot(times,Suspension_Sim_Sols[5,:])
+  # ax2.set_title("Bicycle Motion Rate, [m/s]")
+  ax3.plot(times, Suspension_Sim_Sols[5,:]-Suspension_Sim_Sols[4,:],
+          color = (0.4,0.4,0.4))
+  Clim = ax3.plot(times, fill(params[end],length(times)), 
+                  color = (0,0,0), linestyle = "--", label = "High/Low Speed Compression Crossover")
+  Rlim = ax3.plot(times, fill(params[end-1],length(times)), 
+                  color = (0,0,0), linestyle = ":", label = "High/Low Speed Rebound Crossover")
+  ax3.set_title("Net Suspension Motion Rate, [m/s]")
+  ax3.set_xlabel("Time, [s]")
+  ax3.legend()
+
+  fig2 = figure(1)
+  ax4 = fig2.subplots()
+  display_time = 2.5 # [s]
+  display_pts = Integer(round(display_time/dtime))
+  ax4.plot(times[1:display_pts]*x_vel,
+          Suspension_Sim_Sols[1,1:display_pts], 
+          color = (0.7,0.7,0.7))
+  ax4.plot(times[1:display_pts]*x_vel,
+          Suspension_Sim_Sols[2,1:display_pts], 
+          color = (0.4,0.4,0.4))
+  ax4.plot(times[1:display_pts]*x_vel,
+          Suspension_Sim_Sols[3,1:display_pts],
+          color = (0,0,0))
+  ax4.set_title("Ground, Wheel, and Frame Position")
+  ax4.set_xlabel("Distance, [m]")
+  ax4.set_ylabel("Altitude, [m]")
+  ax4.legend(("Ground","Wheel","Frame"))
+  ax4.axis("equal")
+
+  xs = [i for i in -1.5:0.01:2]
+  k1s = [k_1(1.0, xval) for xval in xs ]
+  k2s = [k_2(1.0, xval) for xval in xs ]
+  # b1s = [sm_pw_damp_coeff(1000.0, # bRH [N-s/m]
+  #                         1000.0, # bRL [N-s/m]
+  #                         1000.0, # bCL [N-s/m]
+  #                         1000.0, # bCH [N-s/m]
+  #                         5.0, # y_dotcritR [m/s]
+  #                         -5.0, # y_dotcritC [m/s]
+  # Suspension_Sim_Sols[5,i]-Suspension_Sim_Sols[4,i]) 
+  # for i=1:length(Suspension_Sim_Sols)]
+
+  fig3 = figure(2)
+  ax5 = fig3.subplots()
+  ax5.plot(times, -x1, color = (0.6,0.6,0.6), linestyle = "-")
+  ax5.plot(times, -x2, color = (0.8,0.8,0.8), linestyle = "-")
+  ax5.set_title("Normalized Suspension Travel/Tire Displacement")
+  ax5.set_xlabel("Time, [s] / Spring Constant Multiplier, [nondim.]")
+  ax5.set_ylabel("Normalized Displacement")
+  ax5.plot(k1s, -xs, color = (0,0,0), linestyle = "-")
+  ax5.plot(k2s, -xs, color = (0,0,0), linestyle = "--")
+  ax5.set_xlim((0,times[end]))
+  ax5.set_ylim((-2,1.5))
+  ax5.legend(("x1","x2","k1/k1_0","k2/k2_0"))
+
 end
 
 return [sum(ground_following)/num_sims, sum(ride_comfort)/num_sims]
