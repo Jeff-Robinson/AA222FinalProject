@@ -15,6 +15,7 @@ while true
     yr = f(xr)
 
     num_evals += 1 # end optimization if max number of evals reached
+    println(num_evals, " / ", num_evals_max)
     if num_evals >= num_evals_max
         return S[argmin(y_arr)]
     end
@@ -24,6 +25,7 @@ while true
         ye = f(xe)
 
         num_evals += 1 # end optimization if max number of evals reached
+        println(num_evals, " / ", num_evals_max)
         if num_evals >= num_evals_max
             return S[argmin(y_arr)]
         end
@@ -37,6 +39,7 @@ while true
         yc = f(xc)
 
         num_evals += 1 # end optimization if max number of evals reached
+        println(num_evals, " / ", num_evals_max)
         if num_evals >= num_evals_max
             return S[argmin(y_arr)]
         end
@@ -47,6 +50,7 @@ while true
                 y_arr[i] = f(S[i])
                 
                 num_evals += 1 # end optimization if max number of evals reached
+                println(num_evals, " / ", num_evals_max)
                 if num_evals >= num_evals_max
                     return S[argmin(y_arr)]
                 end
@@ -61,25 +65,25 @@ end
 end
 
 
-"""
+# """
 
-Arguments:
-- `f`: Function to be optimized
-- `g`: Gradient function for `f`
-- `x0`: (Vector) Initial position to start from
-- `n`: (Int) Number of evaluations allowed. Remember `g` costs twice of `f`
-- `prob`: (String) Name of the problem. So you can use a different strategy for each problem
-"""
-function optimize(f, g, x0, n, prob)
-S = [x0] # initialize simplex with given random point
-for i=1:length(x0) # fill out remaining simplex points by projecting from given random point to points on origin axes
-    if prob == "simple_2"
-        push!(S, clamp.(randn(length(x0)), -3.0, 3.0)) # randomized simplex works better for Simple 2 for some reason
-    else
-        zvec = zeros(length(x0))
-        zvec[i] = x0[i]
-        push!(S, zvec)
-    end
-end
-return nelder_mead(f, S, n)
-end
+# Arguments:
+# - `f`: Function to be optimized
+# - `g`: Gradient function for `f`
+# - `x0`: (Vector) Initial position to start from
+# - `n`: (Int) Number of evaluations allowed. Remember `g` costs twice of `f`
+# - `prob`: (String) Name of the problem. So you can use a different strategy for each problem
+# """
+# function optimize(f, g, x0, n, prob)
+# S = [x0] # initialize simplex with given random point
+# for i=1:length(x0) # fill out remaining simplex points by projecting from given random point to points on origin axes
+#     if prob == "simple_2"
+#         push!(S, clamp.(randn(length(x0)), -3.0, 3.0)) # randomized simplex works better for Simple 2 for some reason
+#     else
+#         zvec = zeros(length(x0))
+#         zvec[i] = x0[i]
+#         push!(S, zvec)
+#     end
+# end
+# return nelder_mead(f, S, n)
+# end
