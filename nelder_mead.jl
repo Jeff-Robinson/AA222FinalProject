@@ -12,6 +12,8 @@ while true
     xs, ys = S[end-1], y_arr[end-1] # second-highest
     xm = mean(S[1:end-1]) # centroid
     xr = xm + α * (xm - xh) # reflection point
+    xr[end-1] = abs(xr[end-1])
+    xr[end] = -abs(xr[end])
     yr = f(xr)
 
     num_evals += 1 # end optimization if max number of evals reached
@@ -22,6 +24,8 @@ while true
 
     if yr < yl
         xe = xm + β * (xr - xm) # expansion point
+        xe[end-1] = abs(xe[end-1])
+        xe[end] = -abs(xe[end])
         ye = f(xe)
 
         num_evals += 1 # end optimization if max number of evals reached
@@ -36,6 +40,8 @@ while true
             xh, yh, S[end], y_arr[end] = xr, yr, xr, yr
         end
         xc = xm + γ * (xh - xm) # contraction point
+        xc[end-1] = abs(xc[end-1])
+        xc[end] = -abs(xc[end])
         yc = f(xc)
 
         num_evals += 1 # end optimization if max number of evals reached
@@ -47,6 +53,8 @@ while true
         if yc > yh
             for i in 2:length(y_arr)
                 S[i] = (S[i] + xl)/2
+                S[i][end-1] = abs(S[i][end-1])
+                S[i][end] = -abs(S[i][end])
                 y_arr[i] = f(S[i])
                 
                 num_evals += 1 # end optimization if max number of evals reached
@@ -63,27 +71,3 @@ while true
     end
 end
 end
-
-
-# """
-
-# Arguments:
-# - `f`: Function to be optimized
-# - `g`: Gradient function for `f`
-# - `x0`: (Vector) Initial position to start from
-# - `n`: (Int) Number of evaluations allowed. Remember `g` costs twice of `f`
-# - `prob`: (String) Name of the problem. So you can use a different strategy for each problem
-# """
-# function optimize(f, g, x0, n, prob)
-# S = [x0] # initialize simplex with given random point
-# for i=1:length(x0) # fill out remaining simplex points by projecting from given random point to points on origin axes
-#     if prob == "simple_2"
-#         push!(S, clamp.(randn(length(x0)), -3.0, 3.0)) # randomized simplex works better for Simple 2 for some reason
-#     else
-#         zvec = zeros(length(x0))
-#         zvec[i] = x0[i]
-#         push!(S, zvec)
-#     end
-# end
-# return nelder_mead(f, S, n)
-# end

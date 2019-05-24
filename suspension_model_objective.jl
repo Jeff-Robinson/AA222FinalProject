@@ -7,13 +7,13 @@ using OrdinaryDiffEq
 using PyPlot
 using Statistics
 
-default_inputs = (state_vec = [6000.0, 20000.0, 1000.0, 1000.0, 1000.0, 1000.0, 2.0, -2.0],
+default_inputs = (state_vec = [6.0, 20.0, 1.0, 1.0, 1.0, 1.0, 2.0, -2.0],
 tire_thk = 0.0635, # [m]
 tire_OD = 0.711, # [m]
 susp_travel = 0.2, # [m]
 m1 = 50.0, # [kg]
 m2 = 5.0, # [kg]
-x_vel = 5.0, # [m/s], horizontal velocity
+x_vel = 3.0, # [m/s], horizontal velocity
 time_lim = 60.0, # [s], real time per Simulation
 num_sims = 10, # number of iterations to average objectives over
 plotting = false
@@ -31,12 +31,12 @@ Runs a phsyical simulation of a suspended bicycle wheel traversing rough ground 
 
 ### Arguments
   `state_vec::Array{Float64,1}` - array of state variables\n
-      k1_0, [N/m], default: 6000.0
-      k2_0, [N/m], default: 20000.0
-      bRH, [N-s/m], default: 1000.0
-      bRL, [N-s/m], default: 1000.0
-      bCL, [N-s/m], default: 1000.0
-      bCH, [N-s/m], default: 1000.0
+      k1_0, [kN/m], default: 6.0
+      k2_0, [kN/m], default: 20.0
+      bRH, [kN-s/m], default: 1.0
+      bRL, [kN-s/m], default: 1.0
+      bCL, [kN-s/m], default: 1.0
+      bCH, [kN-s/m], default: 1.0
       y_dotcritR, [m/s], default: 2.0
       y_dotcritC, [m/s], default: -2.0
 
@@ -46,7 +46,7 @@ Runs a phsyical simulation of a suspended bicycle wheel traversing rough ground 
   `susp_travel::Float64` -> suspension travel, [m], default: 0.2\n
   `m1::Float64` -> half of bicycle sprung mass (rider + frame), [kg], default: 50.0\n
   `m2::Float64` -> bicycle unsprung mass per wheel, [kg], default: 5.0\n
-  `x_vel::Float64` -> horizontal velocity, [m/s], default: 5.0\n
+  `x_vel::Float64` -> horizontal velocity, [m/s], default: 3.0\n
   `time_lim::Float64` -> duration of simulation, [s], default: 30.0\n
   `num_sims::Integer` -> number of iterations to average objectives, default: 10\n
   `plotting::Bool` -> whether to generate plots from a single simulation run or generate averaged objective values over several simulations, default: false
@@ -64,6 +64,10 @@ function suspension_model_objective(
   num_sims::Integer = default_inputs.num_sims, # number of iterations to average objectives over
   plotting::Bool = default_inputs.plotting
 )
+
+state_orders = [1e3, 1e3, 1e3, 1e3, 1e3, 1e3, 1.0, 1.0]
+
+state_vec = state_vec.*state_orders
 
 k1_0 = state_vec[1] # [N/m]
 k2_0 = state_vec[2] # [N/m]

@@ -1,22 +1,25 @@
 # Optimization Function
 # Jeff Robinson - jbrobin@stanford.edu
-include("nelder_mead.jl")
 include("suspension_model_objective.jl")
 include("weighted_sum.jl")
+include("nelder_mead.jl")
+include("covariance_matrix_adaptation.jl")
+include("cyclic_coordinate_descent.jl")
 
-@time function optimize_suspension(
+function optimize_suspension(
   method = "none", 
-  max_n_evals = 10, 
+  max_n_evals = 100, 
   weights = [0.9,0.1]
 )
+
 function f(x, fweights = weights)
   f = weighted_sum(suspension_model_objective, x, fweights)
   return f
 end
-defaults = [6000.0, 20000.0, 1000.0, 1000.0, 1000.0, 1000.0, 2.0, -2.0]
+defaults = [6.0, 20.0, 1.0, 1.0, 1.0, 1.0, 2.0, -2.0]
 n_dims = length(defaults)
 
-if method == "Nelder-Mead"
+if method == "NMS" # Nelder-Mead Simplex
   S = [defaults]
   for i = 1:n_dims
       S_i = [defaults[1]*rand()*2,
@@ -35,6 +38,24 @@ if method == "Nelder-Mead"
     S,
     max_n_evals
   ) #; α=1.0, β=2.0, γ=0.5)
+
+elseif method == "CMA" # Covariance Matrix Adaptation
+  x_best = covariance_matrix_adaptation(
+    f, 
+    defaults, 
+    max_n_evals
+    # σ = 1.0,
+    # m = 4 + floor(Int, 3*log(length(x))),
+    # m_elite = div(m, 2),
+  )
+
+elseif method == "CCD"
+  x_best, x_log = cyclic_coordinate_descent(
+    f, 
+    defaults, 
+    max_n_evals, 
+    evals_per_search = 20
+  )
 
 elseif method == "none"
   x_best = defaults
