@@ -15,9 +15,10 @@ m1 = 50.0, # [kg]
 m2 = 5.0, # [kg]
 x_vel = 3.0, # [m/s], horizontal velocity
 time_lim = 60.0, # [s], real time per Simulation
-num_sims = 10, # number of iterations to average objectives over
+num_sims = 20, # number of iterations to average objectives over
 plotting = false
 )
+
 
 """
 
@@ -198,13 +199,18 @@ char_pt_scale = Integer(round(tire_OD/x_vel/dtime)) # number of time steps requi
 # char_time_scale = tire_OD/x_vel
 
 # ODE PROBLEM DEFINITION
-# times = []
+t_last = Array{Float32, 1}(undef, 0)
+push!(t_last, 0.0)
 moving_avg_incline = zeros(char_pt_scale+1)
-accels = []
 function suspension_model(dy, y, p, t)
   # y = [y0, y2, y1, y2_dot, y1_dot]
   # p = [m1, m2, y1_0, y2_0, k1_0, k2_0, bRH, bRL, bCL, bCH, y_dotcritR, y_dotcritC]
-  # push!(times, t)
+
+  if t == 0.0 && t_last[end] == 0.0 && length(t_last) > 10
+    deleteat!(t_last, 1:length(t_last)-1)
+    deleteat!(moving_avg_incline, 1:length(moving_avg_incline)-char_pt_scale-1)
+  end
+
   m1, m2, y1_0, y2_0, k1_0, k2_0, bRH, bRL, bCL, bCH, y_dotcritR, y_dotcritC = p
   travel_zero_point = y1_0 - y2_0
   x1 = ((y[3]-y[2]) - travel_zero_point)/susp_travel
@@ -213,7 +219,12 @@ function suspension_model(dy, y, p, t)
   k2 = k_2(k2_0, x2)
   b1 = sm_pw_damp_coeff(bRH, bRL, bCL, bCH, y_dotcritR, y_dotcritC, y[5]-y[4])
 
-  push!(moving_avg_incline, rand(Normal(-0.5,50.0)))
+  terrain_dist = Normal(-0.5,50.0)
+  t_gap = t - t_last[end]
+  t_gap > 0 ? pts_gap = floor(Int32, t_gap/dtime) : pts_gap = 1
+  append!(moving_avg_incline, rand(terrain_dist, pts_gap))
+  push!(t_last, t)
+  # push!(moving_avg_incline, rand(terrain_dist))
   dy[1] = mean(moving_avg_incline[end-char_pt_scale:end])
   dy[2] = y[4]
   dy[3] = y[5]
@@ -222,7 +233,6 @@ function suspension_model(dy, y, p, t)
           k2/m2*((y[2]-y[1]) - y2_0)
   dy[5] = -g - b1/m1*(y[5]-y[4]) - 
           k1/m1*((y[3]-y[2]) - travel_zero_point)
-  push!(accels, dy[5])
 end
 
 # SOLVING
@@ -232,15 +242,17 @@ ground_following = []
 ride_comfort = []
 for i = 1:num_sims
   # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
-  # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Tsit5())
   Suspension_Sim_Sols = solve(Suspension_Sim_Prob,DP5())
+
   # OBJECTIVE CRITERIA
-  if Suspension_Sim_Sols.t[end] == time_lim
+  if Suspension_Sim_Sols.t[end] >= 0.95*time_lim
     push!(ground_following, 
           # sqrt(sum(((Suspension_Sim_Sols[2,:].-Suspension_Sim_Sols[1,:])/tire_thk).^2)) )
           abs(sum((Suspension_Sim_Sols[2,:].-Suspension_Sim_Sols[1,:])/tire_thk)
           /length(Suspension_Sim_Sols) - 1))
-    push!(ride_comfort, sqrt(sum((accels.+g).^2)/length(accels)))
+    # push!(ride_comfort, sqrt(sum((accels.+g).^2)/length(accels)))
+    accels = [(Suspension_Sim_Sols[5,i] - Suspension_Sim_Sols[5,i-1])/(Suspension_Sim_Sols.t[i] - Suspension_Sim_Sols.t[i-1]) for i = 2:length(Suspension_Sim_Sols)]
+    push!(ride_comfort, sqrt(sum((accels).^2)/length(accels)))
   else
     push!(ground_following, Inf)
     push!(ride_comfort, Inf)
@@ -257,7 +269,8 @@ else
 end
 
 if plotting
-  Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
+  # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
+  Suspension_Sim_Sols = solve(Suspension_Sim_Prob,DP5())
   times = Suspension_Sim_Sols.t
   # ground_following = sum((Suspension_Sim_Sols[2,:].-Suspension_Sim_Sols[1,:])/tire_thk)/length(Suspension_Sim_Sols) - 1
   # ride_comfort = sqrt(sum((accels.+g).^2)/length(accels))
@@ -285,16 +298,17 @@ if plotting
 
   fig2 = figure(1)
   ax4 = fig2.subplots()
-  display_time = 2.5 # [s]
-  display_pts = Integer(round(display_time/dtime))
-  ax4.plot(times[1:display_pts]*x_vel,
-          Suspension_Sim_Sols[1,1:display_pts], 
+  display_time = 60 # [s]
+  # display_pts = Integer(round(display_time/dtime))
+  display_pts = findall(times .<= display_time)
+  ax4.plot(times[display_pts]*x_vel,
+          Suspension_Sim_Sols[1,display_pts], 
           color = (0.7,0.7,0.7))
-  ax4.plot(times[1:display_pts]*x_vel,
-          Suspension_Sim_Sols[2,1:display_pts], 
+  ax4.plot(times[display_pts]*x_vel,
+          Suspension_Sim_Sols[2,display_pts], 
           color = (0.4,0.4,0.4))
-  ax4.plot(times[1:display_pts]*x_vel,
-          Suspension_Sim_Sols[3,1:display_pts],
+  ax4.plot(times[display_pts]*x_vel,
+          Suspension_Sim_Sols[3,display_pts],
           color = (0,0,0))
   ax4.set_title("Ground, Wheel, and Frame Position")
   ax4.set_xlabel("Distance, [m]")
@@ -305,15 +319,6 @@ if plotting
   xs = [i for i in -1.5:0.01:2]
   k1s = [k_1(1.0, xval) for xval in xs ]
   k2s = [k_2(1.0, xval) for xval in xs ]
-  # b1s = [sm_pw_damp_coeff(1000.0, # bRH [N-s/m]
-  #                         1000.0, # bRL [N-s/m]
-  #                         1000.0, # bCL [N-s/m]
-  #                         1000.0, # bCH [N-s/m]
-  #                         5.0, # y_dotcritR [m/s]
-  #                         -5.0, # y_dotcritC [m/s]
-  # Suspension_Sim_Sols[5,i]-Suspension_Sim_Sols[4,i]) 
-  # for i=1:length(Suspension_Sim_Sols)]
-
   fig3 = figure(2)
   ax5 = fig3.subplots()
   ax5.plot(times, -x2, color = (0.8,0.8,0.8), linestyle = "-")
@@ -327,6 +332,24 @@ if plotting
   ax5.set_ylim((-2,1.5))
   ax5.legend(("Tire Displacement","Suspension Travel","Tire Spring Constant Multiplier","Suspension Spring Constant Multiplier"))
 
+  # fig4 = figure(3)
+  # ax6 = fig4.subplots()
+  # display_time = 2.5 # [s]
+  # display_pts = Integer(round(display_time/dtime))
+  # ax6.plot(times[1:display_pts]*x_vel,
+  #         Suspension_Sim_Sols[1,1:display_pts], 
+  #         color = (0.7,0.7,0.7))
+  # ax6.plot(times[1:display_pts]*x_vel,
+  #         Suspension_Sim_Sols[2,1:display_pts], 
+  #         color = (0.4,0.4,0.4))
+  # ax6.plot(times[1:display_pts]*x_vel,
+  #         Suspension_Sim_Sols[3,1:display_pts],
+  #         color = (0,0,0))
+  # ax6.set_title("Ground, Wheel, and Frame Position")
+  # ax6.set_xlabel("Distance, [m]")
+  # ax6.set_ylabel("Altitude, [m]")
+  # ax6.legend(("Ground","Wheel","Frame"))
+  # ax6.axis("equal")
 end
 
 return [ground_following_mean, ride_comfort_mean]

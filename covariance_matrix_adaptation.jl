@@ -10,9 +10,7 @@ function covariance_matrix_adaptation(f, x, max_n_evals;
     )
     k_max = floor(Int64, (max_n_evals - 1)/(m+1))
     x_best = x
-    y_best = f(x_best)
-    n_evals = 1
-    println(n_evals)
+    y_best, n_evals = f(x_best)
 
     μ, n_dims = copy(x), length(x)
     ws = normalize!(vcat(log((m+1)/2) .- log.(1:m_elite), 
@@ -34,20 +32,11 @@ function covariance_matrix_adaptation(f, x, max_n_evals;
           xs[i][end-1] = abs(xs[i][end-1])
           xs[i][end] = -abs(xs[i][end])
         end
-        ys = [f(x) for x in xs]
-        n_evals += n_dims
-        println(n_evals)
+        for x in xs
+          ys, n_evals = f(x, n_evals)
+        end
         
-        # infeas_xs = ys .== Inf
-        # infeas_xs_locs = findall(infeas_xs)
-        # if any(infeas_xs)
-        #     deleteat!(xs, infeas_xs_locs)
-        #     deleteat!(ys, infeas_xs_locs)
-        # end
-
-        # length(xs) <= m_elite && continue
         is = sortperm(ys) # best to worst
-        
 
         # selection and mean update
         δs = [(x - μ)/σ for x in xs]
@@ -67,9 +56,7 @@ function covariance_matrix_adaptation(f, x, max_n_evals;
         Σ = triu(Σ) + triu(Σ,1)' # enforce symmetry
 
         x_best_potential = μ
-        y_best_potential = f(μ)
-        n_evals += 1
-        println(n_evals)
+        y_best_potential, n_evals = f(μ, n_evals)
         if ys[is[1]] < y_best_potential
           x_best_potential = xs[is[1]]
           y_best_potential = ys[is[1]]
