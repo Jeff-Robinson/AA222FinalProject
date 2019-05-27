@@ -8,13 +8,13 @@ using PyPlot
 using Statistics
 
 default_inputs = (state_vec = [6.0, 20.0, 1.0, 1.0, 1.0, 1.0, 2.0, -2.0],
-tire_thk = 0.0635, # [m]
-tire_OD = 0.711, # [m]
+tire_thk = 0.0635, # [m] 2.50 inch 650B tire https://www.bikecalc.com/wheel_size_math
+tire_OD = 0.711, # [m] 2.50 inch 650B tire, characteristic length scale for trail surface noise
 susp_travel = 0.2, # [m]
 m1 = 50.0, # [kg]
 m2 = 5.0, # [kg]
-x_vel = 3.0, # [m/s], horizontal velocity
-time_lim = 60.0, # [s], real time per Simulation
+x_vel = 2.0, # [m/s], horizontal velocity
+time_lim = 30.0, # [s], real time per Simulation
 num_sims = 20, # number of iterations to average objectives over
 plotting = false
 )
@@ -168,9 +168,6 @@ end
 
 # INITIAL CONDITIONS
 g = 9.8065 # [m/s^2]
-# tire_thk = 0.0635 # m, 2.50 inch 650B tire https://www.bikecalc.com/wheel_size_math
-# tire_OD = 0.711 # m, 6.50 inch 650B tire, characteristic length scale for trail surface noise
-# susp_travel = 0.2 # m
 sag_point = 0.0 # portion of suspension travel used with no load applied
 init_state = [0.0, #y0_0 [m]
               tire_thk, # y2_0 [m]
@@ -194,9 +191,7 @@ params = [
   y_dotcritC
 ]
 dtime = 0.0001 #sec
-# x_vel = 10.0 # [m/s], horizontal velocity
 char_pt_scale = Integer(round(tire_OD/x_vel/dtime)) # number of time steps required to traverse one characteristic length scale (tire OD)
-# char_time_scale = tire_OD/x_vel
 
 # ODE PROBLEM DEFINITION
 t_last = Array{Float32, 1}(undef, 0)
@@ -224,7 +219,6 @@ function suspension_model(dy, y, p, t)
   t_gap > 0 ? pts_gap = floor(Int32, t_gap/dtime) : pts_gap = 1
   append!(moving_avg_incline, rand(terrain_dist, pts_gap))
   push!(t_last, t)
-  # push!(moving_avg_incline, rand(terrain_dist))
   dy[1] = mean(moving_avg_incline[end-char_pt_scale:end])
   dy[2] = y[4]
   dy[3] = y[5]
@@ -238,21 +232,19 @@ end
 # SOLVING
 Suspension_Sim_Prob = ODEProblem(suspension_model,init_state,tspan,params)
 
-ground_following = []
-ride_comfort = []
+ground_following = Array{Float64, 1}(undef, num_sims)
+ride_comfort = Array{Float64, 1}(undef, num_sims)
 for i = 1:num_sims
   # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
   Suspension_Sim_Sols = solve(Suspension_Sim_Prob,DP5())
+  sol_length = length(Suspension_Sim_Sols.t)
 
   # OBJECTIVE CRITERIA
   if Suspension_Sim_Sols.t[end] >= 0.95*time_lim
-    push!(ground_following, 
-          # sqrt(sum(((Suspension_Sim_Sols[2,:].-Suspension_Sim_Sols[1,:])/tire_thk).^2)) )
-          abs(sum((Suspension_Sim_Sols[2,:].-Suspension_Sim_Sols[1,:])/tire_thk)
-          /length(Suspension_Sim_Sols) - 1))
-    # push!(ride_comfort, sqrt(sum((accels.+g).^2)/length(accels)))
-    accels = [(Suspension_Sim_Sols[5,i] - Suspension_Sim_Sols[5,i-1])/(Suspension_Sim_Sols.t[i] - Suspension_Sim_Sols.t[i-1]) for i = 2:length(Suspension_Sim_Sols)]
-    push!(ride_comfort, sqrt(sum((accels).^2)/length(accels)))
+    push!(ground_following, abs(sum((Suspension_Sim_Sols[2,:].-Suspension_Sim_Sols[1,:])/tire_thk)/sol_length - 1))
+
+    accels = [(Suspension_Sim_Sols[5,i] - Suspension_Sim_Sols[5,i-1])/(Suspension_Sim_Sols.t[i] - Suspension_Sim_Sols.t[i-1]) for i = 2:sol_length]
+    push!(ride_comfort, sqrt(sum(accels.^2)/(sol_length-1)))
   else
     push!(ground_following, Inf)
     push!(ride_comfort, Inf)
@@ -264,8 +256,8 @@ if any(ground_following .== Inf) || any(ground_following .== NaN) || any(ride_co
   ground_following_mean = Inf
   ride_comfort_mean = Inf
 else
-  ground_following_mean = sum(ground_following)/num_sims
-  ride_comfort_mean = sum(ride_comfort)/num_sims
+  ground_following_mean = mean(ground_following)
+  ride_comfort_mean = mean(ride_comfort)
 end
 
 if plotting

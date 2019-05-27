@@ -75,7 +75,7 @@ function optimize_suspension(
                # bCH, [kN-s/m], 
                # y_dotcritR, [m/s], 
                # y_dotcritC, [m/s]]
-  defaults = [6.0, 20.0, 1.0, 1.0, 1.0, 1.0, 2.0, -2.0]
+  defaults = default_inputs.state_vec
   n_dims = length(defaults)
 
   if method == "CCD"
