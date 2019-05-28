@@ -12,10 +12,15 @@ function particle_swarm_optimization(f, population, max_n_evals;
   n_dims, m = length(population[1].x), length(population)
   k_max = floor(Int32, (max_n_evals - m)/(2*m))
   x_best, y_best = copy(population[1].x_best), Inf
+
+  x_log = [x_best]
+  evals_log = [NUM_FXN_EVALS]
   for P in population
     y = f(P.x)
     if y < y_best
       x_best[:], y_best = P.x, y
+      push!(x_log, x_best)
+      push!(evals_log, NUM_FXN_EVALS)
     end
   end
   for k in 1:k_max
@@ -26,11 +31,13 @@ function particle_swarm_optimization(f, population, max_n_evals;
       y = f(P.x)
       if y < y_best
         x_best[:], y_best = P.x, y
+        push!(x_log, x_best)
+        push!(evals_log, NUM_FXN_EVALS)
       end
       if y < f(P.x_best)
         P.x_best[:] = P.x
       end
     end
   end
-  return x_best
+  return x_best, x_log, evals_log
 end

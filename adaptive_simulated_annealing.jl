@@ -14,6 +14,8 @@ function adaptive_simulated_annealing(f, x, v, t, ϵ, max_n_evals;
   y_arr, n_dims, U = [], length(x), Uniform(-1.0,1.0)
   a, counts_cycles, counts_resets = zeros(n_dims), 0, 0
 
+  x_log = [x_best]
+  evals_log = [NUM_FXN_EVALS]
   while true
     for i in 1:n_dims
       xp = x + basis(i, n_dims)*rand(U)*v[i]
@@ -24,11 +26,13 @@ function adaptive_simulated_annealing(f, x, v, t, ϵ, max_n_evals;
         a[i] += 1
         if yp < y_best
           x_best, y_best = xp, yp
+          push!(x_log, x_best)
+          push!(evals_log, NUM_FXN_EVALS)
         end
       end
 
       if NUM_FXN_EVALS >= max_n_evals
-        return x_best
+        return x_best, x_log, evals_log
       end
     end
 
@@ -52,7 +56,7 @@ function adaptive_simulated_annealing(f, x, v, t, ϵ, max_n_evals;
       break
     end
   end
-  return x_best
+  return x_best, x_log, evals_log
 end
 
 ## Corana Update Formula (Kochenderfer & Wheler Algorithm 8.5) ##

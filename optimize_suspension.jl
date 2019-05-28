@@ -139,7 +139,7 @@ function optimize_suspension(;
     )
 
   elseif method == "CMA" # Covariance Matrix Adaptation
-    x_best = covariance_matrix_adaptation(
+    x_best, x_log, evals_log = covariance_matrix_adaptation(
       f, 
       defaults, 
       max_n_evals
@@ -149,7 +149,7 @@ function optimize_suspension(;
     )
 
   elseif method == "ASA"
-    x_best = adaptive_simulated_annealing(
+    x_best, x_log, evals_log = adaptive_simulated_annealing(
       f, 
       defaults, 
       step_sizes, # v, step size vector
@@ -170,7 +170,7 @@ function optimize_suspension(;
       particle_x = defaults.+step_sizes.*rand(Uniform(-1.0,1.0), n_dims)
       push!(population, particle(particle_x, zeros(n_dims), defaults))
     end
-    x_best = particle_swarm_optimization(
+    x_best, x_log, evals_log = particle_swarm_optimization(
       f, 
       population, 
       max_n_evals
@@ -185,7 +185,7 @@ function optimize_suspension(;
     for i = 2:pop_size
       push!(flies, defaults.+step_sizes.*rand(Uniform(-1.0,1.0), n_dims))
     end
-    x_best = firefly(
+    x_best, x_log, evals_log = firefly(
       f, 
       flies, 
       max_n_evals
@@ -199,7 +199,9 @@ function optimize_suspension(;
 
   end
 
-  y_best = suspension_model_objective(x_best, plotting = true)
+  y_best = suspension_model_objective(x_best)
   println("Ground Following (mean distance from tire to ground): ", y_best[1], "\nRide Comfort (RMS vertical acceleration of bike frame): ", y_best[2])
+
+  
   return x_best
 end

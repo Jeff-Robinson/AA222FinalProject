@@ -11,6 +11,8 @@ function covariance_matrix_adaptation(f, x, max_n_evals;
     k_max = floor(Int64, (max_n_evals - 1)/(m+1))
     x_best = x
     y_best = f(x_best)
+    x_log = [x]
+    evals_log = [NUM_FXN_EVALS]
 
     μ, n_dims = copy(x), length(x)
     ws = normalize!(vcat(log((m+1)/2) .- log.(1:m_elite), 
@@ -51,7 +53,7 @@ function covariance_matrix_adaptation(f, x, max_n_evals;
 
         x_best_potential = μ
         y_best_potential = f(μ)
-        if ys[is[1]] < y_best_potential
+        if ys[is[1]] < y_best_mean
           x_best_potential = xs[is[1]]
           y_best_potential = ys[is[1]]
         end
@@ -59,6 +61,8 @@ function covariance_matrix_adaptation(f, x, max_n_evals;
             x_best = x_best_potential
             y_best = y_best_potential
         end
+        push!(x_log, x_best)
+        push!(evals_log, NUM_FXN_EVALS)
     end
-    return x_best
+    return x_best, x_log, evals_log
 end
