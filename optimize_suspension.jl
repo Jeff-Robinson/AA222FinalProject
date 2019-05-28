@@ -10,6 +10,8 @@ include("adaptive_simulated_annealing.jl")
 include("particle_swarm_optimization.jl")
 include("firefly_algorithm.jl")
 
+using JLD
+
 function constraints(state_vec)
   c = zeros(8)
 
@@ -37,6 +39,8 @@ function constraints(state_vec)
   return c
 end
 
+
+
 ## Quadratic Penalty, Inequality <= 0 constraints only ("Algorithms For Optimization" Equation 10.41, Kochenderfer & Wheeler) ##
 function P_quad(constraint_values)
   P_quadratic = 0.0
@@ -45,6 +49,8 @@ function P_quad(constraint_values)
   end
   return P_quadratic
 end
+
+
 
 ## Count Penalty, Inequality <= 0 constraints only ("Algorithms For Optimization" Equation 10.39, Kochenderfer & Wheeler) ##
 function P_count(constraint_values)
@@ -57,11 +63,14 @@ function P_count(constraint_values)
   return P_count
 end
 
+
+
 function penalties(x)
   constraint_vals = constraints(x)
   p_val = P_quad(constraint_vals) + P_count(constraint_vals)
   return 100*p_val
 end
+
 
 
 function weighted_sum(f, x, weights)
@@ -70,10 +79,12 @@ return combined_f
 end
 
 
+
 function optimize_suspension(;
   method = "none", 
   max_n_evals = 100, 
-  weights = [0.99,0.01]
+  weights = [0.99,0.01],
+  save = false
 )
 
   global NUM_FXN_EVALS = 0
@@ -202,6 +213,28 @@ function optimize_suspension(;
   y_best = suspension_model_objective(x_best)
   println("Ground Following (mean distance from tire to ground): ", y_best[1], "\nRide Comfort (RMS vertical acceleration of bike frame): ", y_best[2])
 
-  
+  if save == true
+    save_name = savefile_name(method)
+    savefile = jldopen(save_name, "w")
+    write(savefile, "x_best", x_best)
+    write(savefile, "y_best", y_best)
+    write(savefile, "x_log", x_log)
+    write(savefile, "evals_log", evals_log)
+
+    # read(savefile)
+    # get(read(savefile), "a", "error")
+  end
   return x_best
+end
+
+
+
+function savefile_name(method, number = 1)
+  savefile_name = "$(method)_savefile_$(number).jld"
+  try
+    existing_save = open(savefile_name, "r")
+    savefile_name(method, number += 1)
+  catch
+    return savefile_name
+  end
 end
