@@ -64,6 +64,8 @@ function cyclic_coordinate_descent(f, x, max_n_evals; evals_per_search)
   Δ, n_dims, n_evals = Inf, length(x), 0
   k_max = floor(Int64, max_n_evals/(n_dims*evals_per_search))
   x_log = [x]
+  y_log = [Inf]
+  evals_log = [0]
   # while abs(Δ) > ϵ
   for k = 1:k_max
     xp = copy(x)
@@ -73,8 +75,9 @@ function cyclic_coordinate_descent(f, x, max_n_evals; evals_per_search)
       x_comp_best = line_search(f_comp, x[i], evals_per_search)
       x = [j == i ? x_comp_best : x[j] for j=1:n_dims]
       push!(x_log, x)
+      push!(evals_log, NUM_FXN_EVALS)
     end
     Δ = norm(x - xp)
   end
-  return x, x_log
+  return x, x_log, evals_log
 end

@@ -8,6 +8,7 @@ include("cyclic_coordinate_descent.jl")
 include("generalized_pattern_search.jl")
 include("adaptive_simulated_annealing.jl")
 include("particle_swarm_optimization.jl")
+include("firefly_algorithm.jl")
 
 function constraints(state_vec)
   c = zeros(8)
@@ -97,7 +98,7 @@ function optimize_suspension(;
   step_sizes = [2.0, 2.0, 0.5, 0.5, 0.5, 0.5, 1.0, 1.0]
 
   if method == "CCD"
-    x_best, x_log = cyclic_coordinate_descent(
+    x_best, x_log, evals_log = cyclic_coordinate_descent(
       f, 
       defaults, 
       max_n_evals, 
@@ -119,7 +120,7 @@ function optimize_suspension(;
         S_i = defaults.+step_sizes.*rand(Uniform(-1.0,1.0), n_dims)
         push!(S, S_i)
     end
-    x_best = nelder_mead(
+    x_best, x_log, evals_log = nelder_mead(
       f,
       S,
       max_n_evals
@@ -128,7 +129,7 @@ function optimize_suspension(;
   elseif method == "GPS"
     D = [basis(i, n_dims) for i = 1:n_dims]
     D = vcat(D, -D)
-    x_best = generalized_pattern_search(
+    x_best, x_log, evals_log = generalized_pattern_search(
       f, 
       defaults, 
       step_sizes, # α - step size vector
@@ -165,7 +166,7 @@ function optimize_suspension(;
   elseif method == "PSO"
     population = [particle(defaults, zeros(n_dims), defaults)]
     pop_size = 20
-    for i = 1:pop_size
+    for i = 2:pop_size
       particle_x = defaults.+step_sizes.*rand(Uniform(-1.0,1.0), n_dims)
       push!(population, particle(particle_x, zeros(n_dims), defaults))
     end
@@ -176,6 +177,21 @@ function optimize_suspension(;
       # w = 1,
       # c1 = 1,
       # c2 = 1
+    )
+
+  elseif method == "firefly"
+    flies = [defaults]
+    pop_size = 5
+    for i = 2:pop_size
+      push!(flies, defaults.+step_sizes.*rand(Uniform(-1.0,1.0), n_dims))
+    end
+    x_best = firefly(
+      f, 
+      flies, 
+      max_n_evals
+      # β = 1,
+      # α = 0.1,
+      # brightness = r -> exp(-r^2)
     )
 
   elseif method == "none"
