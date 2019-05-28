@@ -8,6 +8,7 @@ using PyPlot
 using Statistics
 
 default_inputs = (state_vec = [6.0, 20.0, 1.0, 1.0, 1.0, 1.0, 2.0, -2.0],
+state_orders = [1e3, 1e3, 1e3, 1e3, 1e3, 1e3, 1.0, 1.0],
 tire_thk = 0.0635, # [m] 2.50 inch 650B tire https://www.bikecalc.com/wheel_size_math
 tire_OD = 0.711, # [m] 2.50 inch 650B tire, characteristic length scale for trail surface noise
 susp_travel = 0.2, # [m]
@@ -66,9 +67,7 @@ function suspension_model_objective(
   plotting::Bool = default_inputs.plotting
 )
 
-state_orders = [1e3, 1e3, 1e3, 1e3, 1e3, 1e3, 1.0, 1.0]
-
-state_vec = state_vec.*state_orders
+state_vec = state_vec.*default_inputs.state_orders
 
 k1_0 = state_vec[1] # [N/m]
 k2_0 = state_vec[2] # [N/m]
@@ -260,8 +259,9 @@ end
 
 # SOLVING
 # Suspension_Sim_Prob = ODEProblem(suspension_model,init_state,tspan,params)
-global ground_following = Array{Float64, 1}(undef, 0)
-global ride_comfort = Array{Float64, 1}(undef, 0)
+ground_following = Array{Float64, 1}(undef, 0)
+ride_comfort = Array{Float64, 1}(undef, 0)
+sols = []
 for i = 1:num_sims
   Random.seed!(i)
   i <= num_sims/2 ? params[13] = 20.0 : params[13] = 50.0 # terrain roughness
@@ -269,8 +269,8 @@ for i = 1:num_sims
 
   # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
   Suspension_Sim_Sols = solve(Suspension_Sim_Prob,DP5())
-  if i == num_sims
-  global Suspension_Sim_Sols = Suspension_Sim_Sols
+  if plotting && i == num_sims
+    push!(sols, Suspension_Sim_Sols)
   end
   # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Tsit5())
   sol_length = length(Suspension_Sim_Sols.t)
@@ -297,6 +297,7 @@ else
 end
 
 if plotting
+  Suspension_Sim_Sols = sols[1]
   times = Suspension_Sim_Sols.t
 
   travel_zero_point = (1-sag_point)*susp_travel

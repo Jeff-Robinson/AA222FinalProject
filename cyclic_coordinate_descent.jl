@@ -1,10 +1,10 @@
 ## Bracket Minimum (Kochenderfer & Wheeler Algorithm 3.1) ##
-function bracket_minimum(f, x; s=1e-2, k=2.0)
+function bracket_minimum(f, x; s=0.1, k=2.0)
   a = x
   ya = f(x)
   b = a + s
   yb = f(a + s)
-  n_evals = 2
+  n_evals = 2  
   if yb > ya
     a, b = b, a
     ya, yb = yb, ya
@@ -14,7 +14,7 @@ function bracket_minimum(f, x; s=1e-2, k=2.0)
     c = b + s
     yc = f(b + s)
     n_evals += 1
-    if yc > yb
+    if yc >= yb
       return a < c ? (a, c, n_evals) : (c, a, n_evals)
     end
     a, ya, b, yb = b, yb, c, yc

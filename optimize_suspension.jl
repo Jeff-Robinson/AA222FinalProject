@@ -2,54 +2,35 @@
 # Jeff Robinson - jbrobin@stanford.edu
 
 include("suspension_model_objective.jl")
-include("weighted_sum.jl")
 include("nelder_mead.jl")
 include("covariance_matrix_adaptation.jl")
 include("cyclic_coordinate_descent.jl")
 include("generalized_pattern_search.jl")
-
-# const COUNTERS = Dict{String, Int}()
-# getname(f) = string(nameof(f))
-# Base.count(f::Function) = get(COUNTERS, getname(f), 0)
-# """
-# Count the number of times a function was evaluated
-# """
-# macro counted(f)
-#     name = f.args[1].args[1]
-#     name_str = String(name)
-#     body = f.args[2]
-#     update_counter = quote
-#         if !haskey(COUNTERS, $name_str)
-#             COUNTERS[$name_str] = 0
-#         end
-#         COUNTERS[$name_str] += 1
-#     end
-#     insert!(body.args, 1, update_counter)
-#     return f
-# end
+include("adaptive_simulated_annealing.jl")
+include("particle_swarm_optimization.jl")
 
 function constraints(state_vec)
   c = zeros(8)
 
+  # Signs
+  for i = 1:7
+    if state_vec[i] <= 0
+      c[i] -= state_vec[i]*default_inputs.state_orders[i]
+    end
+  end
+  if state_vec[8] >= 0
+    c[8] += state_vec[8]*default_inputs.state_orders[8]
+  end
+
   # Damping Ratio
-  ζ_crit = 2*sqrt(state_vec[1]*default_inputs.m1)
+  ζ_crit = 2*sqrt(abs(state_vec[1]*default_inputs.state_orders[1])*default_inputs.m1)
   for i = 3:6
-    ζ = state_vec[i]/ζ_crit
+    ζ = state_vec[i]*default_inputs.state_orders[i]/ζ_crit
     if ζ > 1.0
       c[i] += (ζ - 1.0)
     elseif ζ < 0.2
       c[i] += (0.2 - ζ)
     end
-  end
-
-  # Signs
-  for i = 1:7
-    if state_vec[i] <= 0
-      c[i] -= state_vec[i]
-    end
-  end
-  if state_vec[8] >= 0
-    c[8] += state_vec[8]
   end
   
   return c
@@ -82,7 +63,13 @@ function penalties(x)
 end
 
 
-function optimize_suspension(
+function weighted_sum(f, x, weights)
+combined_f = sum(f(x).*weights)
+return combined_f
+end
+
+
+function optimize_suspension(;
   method = "none", 
   max_n_evals = 100, 
   weights = [0.99,0.01]
@@ -107,27 +94,29 @@ function optimize_suspension(
                # y_dotcritC, [m/s]]
   defaults = default_inputs.state_vec
   n_dims = length(defaults)
+  step_sizes = [2.0, 2.0, 0.5, 0.5, 0.5, 0.5, 1.0, 1.0]
 
   if method == "CCD"
     x_best, x_log = cyclic_coordinate_descent(
       f, 
       defaults, 
       max_n_evals, 
-      evals_per_search = 50
+      evals_per_search = 20
     )
     
   elseif method == "NMS" # Nelder-Mead Simplex
     S = [defaults]
     for i = 1:n_dims
-        S_i = [defaults[1]*rand()*2,
-              defaults[2]*rand()*2,
-              defaults[3]*rand()*2,
-              defaults[4]*rand()*2,
-              defaults[5]*rand()*2,
-              defaults[6]*rand()*2,
-              rand()*2,
-              -rand()*5
-        ]
+        # S_i = [defaults[1]*rand()*2,
+        #       defaults[2]*rand()*2,
+        #       defaults[3]*rand()*2,
+        #       defaults[4]*rand()*2,
+        #       defaults[5]*rand()*2,
+        #       defaults[6]*rand()*2,
+        #       rand()*2,
+        #       -rand()*5
+        # ]
+        S_i = defaults.+step_sizes.*rand(Uniform(-1.0,1.0), n_dims)
         push!(S, S_i)
     end
     x_best = nelder_mead(
@@ -142,11 +131,11 @@ function optimize_suspension(
     x_best = generalized_pattern_search(
       f, 
       defaults, 
-      [2.0, 2.0, 0.5, 0.5, 0.5, 0.5, 1.0, 1.0], # α - step size vector
+      step_sizes, # α - step size vector
       D, 
       max_n_evals
       # ϵ = 0.01, γ=0.5
-      )
+    )
 
   elseif method == "CMA" # Covariance Matrix Adaptation
     x_best = covariance_matrix_adaptation(
@@ -156,6 +145,37 @@ function optimize_suspension(
       # σ = 1.0,
       # m = 4 + floor(Int, 3*log(length(x))),
       # m_elite = div(m, 2),
+    )
+
+  elseif method == "ASA"
+    x_best = adaptive_simulated_annealing(
+      f, 
+      defaults, 
+      step_sizes, # v, step size vector
+      100,# t, initial temperature
+      0.01, # ϵ
+      max_n_evals
+      # ns = 20,
+      # nϵ = 4,
+      # nt = max(100,5*length(x)),
+      # γ = 0.85,
+      # c = fill(2, length(x))
+    )
+
+  elseif method == "PSO"
+    population = [particle(defaults, zeros(n_dims), defaults)]
+    pop_size = 20
+    for i = 1:pop_size
+      particle_x = defaults.+step_sizes.*rand(Uniform(-1.0,1.0), n_dims)
+      push!(population, particle(particle_x, zeros(n_dims), defaults))
+    end
+    x_best = particle_swarm_optimization(
+      f, 
+      population, 
+      max_n_evals
+      # w = 1,
+      # c1 = 1,
+      # c2 = 1
     )
 
   elseif method == "none"

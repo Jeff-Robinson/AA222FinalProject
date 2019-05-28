@@ -14,13 +14,12 @@ function generalized_pattern_search(f, x, α, D, max_n_evals; γ=0.5)
         end
         break
       end
+      if NUM_FXN_EVALS >= max_n_evals # termination
+        return x
+      end
     end
     if !improved
       α *= γ
     end
-    if NUM_FXN_EVALS >= max_n_evals # termination
-      return x
-    end
   end
-  return x
 end

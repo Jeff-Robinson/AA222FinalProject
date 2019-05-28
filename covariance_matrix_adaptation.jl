@@ -4,7 +4,7 @@ using LinearAlgebra
 
 ## Covariance Matrix Adaptation ("Algorithms For Optimization" Algorithm 8.9, Kochenderfer & Wheeler) ##
 function covariance_matrix_adaptation(f, x, max_n_evals;
-    σ = 0.5,
+    σ = 0.8,
     m = 4 + floor(Int, 3*log(length(x))),
     m_elite = div(m, 2),
     )
