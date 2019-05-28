@@ -1,5 +1,6 @@
 # Optimization Function
 # Jeff Robinson - jbrobin@stanford.edu
+
 include("suspension_model_objective.jl")
 include("weighted_sum.jl")
 include("nelder_mead.jl")
@@ -7,21 +8,48 @@ include("covariance_matrix_adaptation.jl")
 include("cyclic_coordinate_descent.jl")
 include("generalized_pattern_search.jl")
 
+# const COUNTERS = Dict{String, Int}()
+# getname(f) = string(nameof(f))
+# Base.count(f::Function) = get(COUNTERS, getname(f), 0)
+# """
+# Count the number of times a function was evaluated
+# """
+# macro counted(f)
+#     name = f.args[1].args[1]
+#     name_str = String(name)
+#     body = f.args[2]
+#     update_counter = quote
+#         if !haskey(COUNTERS, $name_str)
+#             COUNTERS[$name_str] = 0
+#         end
+#         COUNTERS[$name_str] += 1
+#     end
+#     insert!(body.args, 1, update_counter)
+#     return f
+# end
 
 function constraints(state_vec)
-  c = []
+  c = zeros(8)
 
   # Damping Ratio
   ζ_crit = 2*sqrt(state_vec[1]*default_inputs.m1)
-  for i = 1:4
-    ζ = state_vec[i+2]/ζ_crit
+  for i = 3:6
+    ζ = state_vec[i]/ζ_crit
     if ζ > 1.0
-      push!(c, (ζ - 1.0)*100)
+      c[i] += (ζ - 1.0)
     elseif ζ < 0.2
-      push!(c, (0.2 - ζ)*100)
-    else
-      push!(c, 0.0)
+      c[i] += (0.2 - ζ)
     end
+  end
+
+  # Signs
+  for i = 1:7
+    if state_vec[i] <= 0
+      c[i] -= state_vec[i]
+    end
+  end
+  if state_vec[8] >= 0
+    c[8] += state_vec[8]
   end
   
   return c
@@ -49,7 +77,8 @@ end
 
 function penalties(x)
   constraint_vals = constraints(x)
-  return P_quad(constraint_vals) + P_count(constraint_vals)
+  p_val = P_quad(constraint_vals) + P_count(constraint_vals)
+  return 100*p_val
 end
 
 
@@ -59,12 +88,13 @@ function optimize_suspension(
   weights = [0.99,0.01]
 )
 
-  function f(x, n_evals = 0, max_n_evals = max_n_evals, fweights = weights)
+  global NUM_FXN_EVALS = 0
+  function f(x, max_n_evals = max_n_evals, fweights = weights)
     f = weighted_sum(suspension_model_objective, x, fweights)
     p = penalties(x)
-    n_evals += 1
-    println(n_evals, " / ", max_n_evals)
-    return f + p, n_evals
+    NUM_FXN_EVALS += 1
+    println(NUM_FXN_EVALS, " / ", max_n_evals)
+    return f + p
   end
 
   # state_vec = [k1_0, [kN/m], 
@@ -83,8 +113,9 @@ function optimize_suspension(
       f, 
       defaults, 
       max_n_evals, 
-      evals_per_search = 20
+      evals_per_search = 50
     )
+    
   elseif method == "NMS" # Nelder-Mead Simplex
     S = [defaults]
     for i = 1:n_dims

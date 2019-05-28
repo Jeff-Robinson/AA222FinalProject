@@ -1,15 +1,15 @@
 ## Generalized Pattern Search (Kochenderfer & Wheeler Algorithm 7.6) ##
 function generalized_pattern_search(f, x, α, D, max_n_evals; γ=0.5)
-  y, n_evals = f(x)
+  y = f(x)
   while true
     improved = false
     for (i, d) in enumerate(D)
       xp = x + α.*d
-      yp, n_evals = f(xp, n_evals)
+      yp = f(xp)
       if yp < y
         x, y, improved = xp, yp, true
         D = pushfirst!(deleteat!(D, i), d)
-        if n_evals >= max_n_evals # termination
+        if NUM_FXN_EVALS >= max_n_evals # termination
           return x
         end
         break
@@ -18,7 +18,7 @@ function generalized_pattern_search(f, x, α, D, max_n_evals; γ=0.5)
     if !improved
       α *= γ
     end
-    if n_evals >= max_n_evals # termination
+    if NUM_FXN_EVALS >= max_n_evals # termination
       return x
     end
   end

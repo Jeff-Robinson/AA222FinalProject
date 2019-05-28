@@ -13,8 +13,8 @@ tire_OD = 0.711, # [m] 2.50 inch 650B tire, characteristic length scale for trai
 susp_travel = 0.2, # [m]
 m1 = 50.0, # [kg]
 m2 = 5.0, # [kg]
-x_vel = 2.0, # [m/s], horizontal velocity
-time_lim = 30.0, # [s], real time per Simulation
+x_vel = 5.0, # [m/s], horizontal velocity
+time_lim = 10.0, # [s], real time per Simulation
 num_sims = 20, # number of iterations to average objectives over
 plotting = false
 )
@@ -79,7 +79,7 @@ bCH = state_vec[6] # [N-s/m]
 y_dotcritR = state_vec[7] # y_dotcritR [m/s]
 y_dotcritC = state_vec[8] # y_dotcritC [m/s]
 
-ramp = 5.0
+ramp = 10.0
 
 """
 
@@ -166,6 +166,34 @@ function sm_pw_damp_coeff(
   return pw_damp_coeff
 end
 
+
+# function rand_trail_surface(
+#   time_lim = default_inputs.time_lim,
+#   x_vel = default_inputs.x_vel,
+#   tire_OD = default_inputs.tire_OD,
+#   dtime = 0.0001,
+#   slope = -0.2, 
+#   var = 20.0
+#   )
+#   char_pt_scale = round(Int32, tire_OD/x_vel/dtime)
+#   num_pts = round(Int32, time_lim/dtime)
+#   terrain = Array{Float64, 1}(undef, num_pts)
+#   terrain[1] = 0.0
+#   terrain_time = [dtime*i for i = 1:num_pts]
+#   terrain_distance = [x_vel*dtime*i for i = 1:num_pts]
+#   terrain_incline = Array{Float64, 1}(undef, num_pts)
+
+#   terrain_dist = Normal(slope, var)
+#   moving_avg_incline = rand(terrain_dist, num_pts + char_pt_scale + 1)
+#   for i = 2:num_pts
+#     terrain_incline[i] = mean(moving_avg_incline[i-1:i-1+char_pt_scale])
+#     rise = (dtime*x_vel)*terrain_incline[i]
+#     terrain[i] = terrain[i-1] + rise
+#   end
+#   return terrain, terrain_time, terrain_distance, terrain_incline
+# end
+
+
 # INITIAL CONDITIONS
 g = 9.8065 # [m/s^2]
 sag_point = 0.0 # portion of suspension travel used with no load applied
@@ -188,10 +216,11 @@ params = [
   bCL,
   bCH,
   y_dotcritR,
-  y_dotcritC
+  y_dotcritC,
+  20.0 # terrain roughness
 ]
 dtime = 0.0001 #sec
-char_pt_scale = Integer(round(tire_OD/x_vel/dtime)) # number of time steps required to traverse one characteristic length scale (tire OD)
+char_pt_scale = round(Int32, tire_OD/x_vel/dtime) # number of time steps required to traverse one characteristic length scale (tire OD)
 
 # ODE PROBLEM DEFINITION
 t_last = Array{Float32, 1}(undef, 0)
@@ -199,14 +228,14 @@ push!(t_last, 0.0)
 moving_avg_incline = zeros(char_pt_scale+1)
 function suspension_model(dy, y, p, t)
   # y = [y0, y2, y1, y2_dot, y1_dot]
-  # p = [m1, m2, y1_0, y2_0, k1_0, k2_0, bRH, bRL, bCL, bCH, y_dotcritR, y_dotcritC]
+  # p = [m1, m2, y1_0, y2_0, k1_0, k2_0, bRH, bRL, bCL, bCH, y_dotcritR, y_dotcritC, terrain_roughness]
 
   if t == 0.0 && t_last[end] == 0.0 && length(t_last) > 10
     deleteat!(t_last, 1:length(t_last)-1)
     deleteat!(moving_avg_incline, 1:length(moving_avg_incline)-char_pt_scale-1)
   end
 
-  m1, m2, y1_0, y2_0, k1_0, k2_0, bRH, bRL, bCL, bCH, y_dotcritR, y_dotcritC = p
+  m1, m2, y1_0, y2_0, k1_0, k2_0, bRH, bRL, bCL, bCH, y_dotcritR, y_dotcritC, terrain_roughness = p
   travel_zero_point = y1_0 - y2_0
   x1 = ((y[3]-y[2]) - travel_zero_point)/susp_travel
   k1 = k_1(k1_0, x1)
@@ -214,7 +243,7 @@ function suspension_model(dy, y, p, t)
   k2 = k_2(k2_0, x2)
   b1 = sm_pw_damp_coeff(bRH, bRL, bCL, bCH, y_dotcritR, y_dotcritC, y[5]-y[4])
 
-  terrain_dist = Normal(-0.5,50.0)
+  terrain_dist = Normal(-0.2,terrain_roughness)
   t_gap = t - t_last[end]
   t_gap > 0 ? pts_gap = floor(Int32, t_gap/dtime) : pts_gap = 1
   append!(moving_avg_incline, rand(terrain_dist, pts_gap))
@@ -230,21 +259,28 @@ function suspension_model(dy, y, p, t)
 end
 
 # SOLVING
-Suspension_Sim_Prob = ODEProblem(suspension_model,init_state,tspan,params)
-
-ground_following = Array{Float64, 1}(undef, num_sims)
-ride_comfort = Array{Float64, 1}(undef, num_sims)
+# Suspension_Sim_Prob = ODEProblem(suspension_model,init_state,tspan,params)
+global ground_following = Array{Float64, 1}(undef, 0)
+global ride_comfort = Array{Float64, 1}(undef, 0)
 for i = 1:num_sims
+  Random.seed!(i)
+  i <= num_sims/2 ? params[13] = 20.0 : params[13] = 50.0 # terrain roughness
+  Suspension_Sim_Prob = ODEProblem(suspension_model,init_state,tspan,params)
+
   # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
   Suspension_Sim_Sols = solve(Suspension_Sim_Prob,DP5())
+  if i == num_sims
+  global Suspension_Sim_Sols = Suspension_Sim_Sols
+  end
+  # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Tsit5())
   sol_length = length(Suspension_Sim_Sols.t)
 
   # OBJECTIVE CRITERIA
-  if Suspension_Sim_Sols.t[end] >= 0.95*time_lim
+  if Suspension_Sim_Sols.t[end] == time_lim
     push!(ground_following, abs(sum((Suspension_Sim_Sols[2,:].-Suspension_Sim_Sols[1,:])/tire_thk)/sol_length - 1))
 
     accels = [(Suspension_Sim_Sols[5,i] - Suspension_Sim_Sols[5,i-1])/(Suspension_Sim_Sols.t[i] - Suspension_Sim_Sols.t[i-1]) for i = 2:sol_length]
-    push!(ride_comfort, sqrt(sum(accels.^2)/(sol_length-1)))
+    push!(ride_comfort, sqrt(sum((accels).^2)/(sol_length-1)))
   else
     push!(ground_following, Inf)
     push!(ride_comfort, Inf)
@@ -261,11 +297,7 @@ else
 end
 
 if plotting
-  # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
-  Suspension_Sim_Sols = solve(Suspension_Sim_Prob,DP5())
   times = Suspension_Sim_Sols.t
-  # ground_following = sum((Suspension_Sim_Sols[2,:].-Suspension_Sim_Sols[1,:])/tire_thk)/length(Suspension_Sim_Sols) - 1
-  # ride_comfort = sqrt(sum((accels.+g).^2)/length(accels))
 
   travel_zero_point = (1-sag_point)*susp_travel
   x1 = ((Suspension_Sim_Sols[3,:] .- Suspension_Sim_Sols[2,:]) .- travel_zero_point)/susp_travel
@@ -280,9 +312,9 @@ if plotting
   # ax2.set_title("Bicycle Motion Rate, [m/s]")
   ax3.plot(times, Suspension_Sim_Sols[5,:]-Suspension_Sim_Sols[4,:],
           color = (0.4,0.4,0.4))
-  Clim = ax3.plot(times, fill(params[end],length(times)), 
+  Clim = ax3.plot(times, fill(params[12],length(times)), 
                   color = (0,0,0), linestyle = "--", label = "High/Low Speed Compression Crossover")
-  Rlim = ax3.plot(times, fill(params[end-1],length(times)), 
+  Rlim = ax3.plot(times, fill(params[11],length(times)), 
                   color = (0,0,0), linestyle = ":", label = "High/Low Speed Rebound Crossover")
   ax3.set_title("Net Suspension Motion Rate, [m/s]")
   ax3.set_xlabel("Time, [s]")

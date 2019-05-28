@@ -10,7 +10,7 @@ function covariance_matrix_adaptation(f, x, max_n_evals;
     )
     k_max = floor(Int64, (max_n_evals - 1)/(m+1))
     x_best = x
-    y_best, n_evals = f(x_best)
+    y_best = f(x_best)
 
     μ, n_dims = copy(x), length(x)
     ws = normalize!(vcat(log((m+1)/2) .- log.(1:m_elite), 
@@ -28,13 +28,7 @@ function covariance_matrix_adaptation(f, x, max_n_evals;
     for k in 1:k_max
         P = MvNormal(μ, σ^2*Σ)
         xs = [rand(P) for i in 1:m]
-        for i=1:m # ensure comp. and rebound crossovers are correct sign
-          xs[i][end-1] = abs(xs[i][end-1])
-          xs[i][end] = -abs(xs[i][end])
-        end
-        for x in xs
-          ys, n_evals = f(x, n_evals)
-        end
+        ys = [f(x) for x in xs]
         
         is = sortperm(ys) # best to worst
 
@@ -56,7 +50,7 @@ function covariance_matrix_adaptation(f, x, max_n_evals;
         Σ = triu(Σ) + triu(Σ,1)' # enforce symmetry
 
         x_best_potential = μ
-        y_best_potential, n_evals = f(μ, n_evals)
+        y_best_potential = f(μ)
         if ys[is[1]] < y_best_potential
           x_best_potential = xs[is[1]]
           y_best_potential = ys[is[1]]
