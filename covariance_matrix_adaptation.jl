@@ -53,7 +53,7 @@ function covariance_matrix_adaptation(f, x, max_n_evals;
 
         x_best_potential = μ
         y_best_potential = f(μ)
-        if ys[is[1]] < y_best_mean
+        if ys[is[1]] < y_best_potential
           x_best_potential = xs[is[1]]
           y_best_potential = ys[is[1]]
         end

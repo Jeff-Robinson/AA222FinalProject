@@ -234,8 +234,9 @@ end
 function new_savefile_name(method, number = 1)
   savefile_name = "$(method)_savefile_$(number).jld"
   try
-    jldopen(savefile_name, "r")
-    savefile_name(method, number += 1)
+    open_file = open(savefile_name)
+    close(open_file)
+    new_savefile_name(method, number += 1)
   catch
     return savefile_name
   end
@@ -246,11 +247,16 @@ end
 function existing_savefile_names(method, number = 1, savefile_names = [])
   savefile_name = "$(method)_savefile_$(number).jld"
   try
-    jldopen(savefile_name, "r")
+    open_file = open(savefile_name)
+    close(open_file)
     push!(savefile_names, savefile_name)
     return existing_savefile_names(method, number += 1, savefile_names)
   catch
-    return savefile_names   
+    if number <= 20
+      return existing_savefile_names(method, number += 1, savefile_names)
+    else
+      return savefile_names
+    end
   end
 end
 
@@ -282,7 +288,7 @@ end
 function generate_y_logs()
   savefile_names = all_existing_savefile_names()
   for name in savefile_names
-    savefile = jldopen(name, "w")
+    savefile = jldopen(name, "r+")
     x_log = get(read(savefile), "x_log", "error")
     weights = get(read(savefile), "weights", "error")
     println(name, ": x_log length = ", length(x_log))
