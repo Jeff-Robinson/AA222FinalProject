@@ -2,13 +2,13 @@
 # Jeff Robinson - jbrobin@stanford.edu
 
 include("suspension_model_objective.jl")
-include("nelder_mead.jl")
-include("covariance_matrix_adaptation.jl")
-include("cyclic_coordinate_descent.jl")
-include("generalized_pattern_search.jl")
-include("adaptive_simulated_annealing.jl")
-include("particle_swarm_optimization.jl")
-include("firefly_algorithm.jl")
+include("Algorithms/cyclic_coordinate_descent.jl")
+include("Algorithms/generalized_pattern_search.jl")
+include("Algorithms/nelder_mead.jl")
+include("Algorithms/covariance_matrix_adaptation.jl")
+include("Algorithms/adaptive_simulated_annealing.jl")
+include("Algorithms/particle_swarm_optimization.jl")
+include("Algorithms/firefly_algorithm.jl")
 
 using JLD
 
@@ -80,7 +80,7 @@ end
 
 
 
-method_list = ["CCD", "NMS", "GPS", "CMA", "ASA", "PSO", "firefly"]
+method_list = ["CCD", "GPS", "NMS", "CMA", "ASA", "PSO", "firefly"]
 function optimize_suspension(;
   method, 
   max_n_evals, 
@@ -116,27 +116,6 @@ function optimize_suspension(;
       max_n_evals, 
       evals_per_search = 20
     )
-    
-  elseif method == "NMS" # Nelder-Mead Simplex
-    S = [defaults]
-    for i = 1:n_dims
-        # S_i = [defaults[1]*rand()*2,
-        #       defaults[2]*rand()*2,
-        #       defaults[3]*rand()*2,
-        #       defaults[4]*rand()*2,
-        #       defaults[5]*rand()*2,
-        #       defaults[6]*rand()*2,
-        #       rand()*2,
-        #       -rand()*5
-        # ]
-        S_i = defaults.+step_sizes.*rand(Uniform(-1.0,1.0), n_dims)
-        push!(S, S_i)
-    end
-    x_best, x_log, evals_log = nelder_mead(
-      f,
-      S,
-      max_n_evals
-    ) #; α=1.0, β=2.0, γ=0.5)
 
   elseif method == "GPS"
     D = [basis(i, n_dims) for i = 1:n_dims]
@@ -149,6 +128,18 @@ function optimize_suspension(;
       max_n_evals
       # ϵ = 0.01, γ=0.5
     )
+    
+  elseif method == "NMS" # Nelder-Mead Simplex
+    S = [defaults]
+    for i = 1:n_dims
+        S_i = defaults.+step_sizes.*rand(Uniform(-1.0,1.0), n_dims)
+        push!(S, S_i)
+    end
+    x_best, x_log, evals_log = nelder_mead(
+      f,
+      S,
+      max_n_evals
+    ) #; α=1.0, β=2.0, γ=0.5)
 
   elseif method == "CMA" # Covariance Matrix Adaptation
     x_best, x_log, evals_log = covariance_matrix_adaptation(
@@ -165,7 +156,7 @@ function optimize_suspension(;
       f, 
       defaults, 
       step_sizes, # v, step size vector
-      100,# t, initial temperature
+      1000,# t, initial temperature
       0.01, # ϵ
       max_n_evals
       # ns = 20,
@@ -210,7 +201,9 @@ function optimize_suspension(;
   end
 
   y_best = suspension_model_objective(x_best)
-  println("Ground Following (mean distance from tire to ground): ", y_best[1], "\nRide Comfort (RMS vertical acceleration of bike frame): ", y_best[2])
+  println("Method: ", method,
+  "\nWeights: ", weights,
+  "\nGround Following (mean distance from tire to ground): ", y_best[1], "\nRide Comfort (RMS vertical acceleration of bike frame): ", y_best[2])
 
   if save == true
     save_name = new_savefile_name(method)
@@ -272,14 +265,19 @@ end
 
 
 
-function optimize_all_algorithms()
-  for method in method_list
-    println(method)
-    @time optimize_suspension(method = method, 
-    max_n_evals = 320, 
-    weights = [0.5,0.5],
-    save = true
-    )
+function optimize_all_algorithms(
+  max_n_evals = 640, 
+  weights = [[1.0, 0.0], [0.5, 0.5], [0.0, 1.0]]
+  )
+  for weight in weights
+    for method in method_list
+      println("Method: ", method)
+      @time optimize_suspension(method = method, 
+      max_n_evals = max_n_evals, 
+      weights = weight,
+      save = true
+      )
+    end
   end
 end
 
@@ -322,12 +320,30 @@ function convergence_plot()
     weights = get(read(savefile), "weights", "error")
     evals_log = get(read(savefile), "evals_log", "error")
     y_log_weighted = get(read(savefile), "y_log_weighted", "error")
+    close(savefile)
 
-    line_color = 0.5*(i/length(savefile_names) + 1)
+    line_color = 0.5*(1-i/length(savefile_names))
     ax.plot(evals_log, y_log_weighted, 
             color = (line_color, line_color, line_color), 
             linestyle = line_styles[mod(i+1, 2)+1])
     legend = (legend..., "$(method), weights = $(weights)")
   end
   ax.legend(legend)
+end
+
+
+
+function print_best()
+  savefile_names = all_existing_savefile_names()
+  for i in 1:length(savefile_names)
+    savefile = jldopen(savefile_names[i], "r")
+    method = get(read(savefile), "method", "error")
+    weights = get(read(savefile), "weights", "error")
+    x_best = get(read(savefile), "x_best", "error")
+    y_best = get(read(savefile), "y_best", "error")
+    close(savefile)
+
+    println("Method: $(method) \nWeights: $(weights) \nx_best = $(x_best) \ny_best = [ground following: $(y_best[1]), ride comfort: $(y_best[2])]\n\n")
+    # \nGround Following (mean distance from tire to ground): $(y_best[1]) \nRide Comfort (RMS vertical acceleration of bike frame): $(y_best[2])\n\n")
+  end
 end

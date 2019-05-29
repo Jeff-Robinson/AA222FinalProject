@@ -264,7 +264,7 @@ ride_comfort = Array{Float64, 1}(undef, 0)
 sols = []
 for i = 1:num_sims
   Random.seed!(i)
-  i <= num_sims/2 ? params[13] = 20.0 : params[13] = 50.0 # terrain roughness
+  # i <= num_sims/2 ? params[13] = 20.0 : params[13] = 50.0 # terrain roughness
   Suspension_Sim_Prob = ODEProblem(suspension_model,init_state,tspan,params)
 
   # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
@@ -284,6 +284,7 @@ for i = 1:num_sims
   else
     push!(ground_following, Inf)
     push!(ride_comfort, Inf)
+    break
   end
 
 end
