@@ -80,9 +80,10 @@ end
 
 
 
+method_list = ["CCD", "NMS", "GPS", "CMA", "ASA", "PSO", "firefly"]
 function optimize_suspension(;
-  method = "none", 
-  max_n_evals = 100, 
+  method, 
+  max_n_evals, 
   weights = [0.99,0.01],
   save = false
 )
@@ -176,7 +177,8 @@ function optimize_suspension(;
 
   elseif method == "PSO"
     population = [particle(defaults, zeros(n_dims), defaults)]
-    pop_size = 20
+    pop_size = 15 # n_iters = (max_n_evals - pop_size)/(2*pop_size)
+    # pop_size = max_n_evals/(2*n_iters + 1)
     for i = 2:pop_size
       particle_x = defaults.+step_sizes.*rand(Uniform(-1.0,1.0), n_dims)
       push!(population, particle(particle_x, zeros(n_dims), defaults))
@@ -192,7 +194,7 @@ function optimize_suspension(;
 
   elseif method == "firefly"
     flies = [defaults]
-    pop_size = 5
+    pop_size = 5 # n_iters = (max_n_evals - pop_size)/(2*pop_size)^2
     for i = 2:pop_size
       push!(flies, defaults.+step_sizes.*rand(Uniform(-1.0,1.0), n_dims))
     end
@@ -205,17 +207,17 @@ function optimize_suspension(;
       # brightness = r -> exp(-r^2)
     )
 
-  elseif method == "none"
-    x_best = defaults
-
   end
 
   y_best = suspension_model_objective(x_best)
   println("Ground Following (mean distance from tire to ground): ", y_best[1], "\nRide Comfort (RMS vertical acceleration of bike frame): ", y_best[2])
 
   if save == true
-    save_name = savefile_name(method)
+    save_name = new_savefile_name(method)
     savefile = jldopen(save_name, "w")
+    write(savefile, "method", method)
+    write(savefile, "max_n_evals", max_n_evals)
+    write(savefile, "weights", weights)
     write(savefile, "x_best", x_best)
     write(savefile, "y_best", y_best)
     write(savefile, "x_log", x_log)
@@ -229,12 +231,97 @@ end
 
 
 
-function savefile_name(method, number = 1)
+function new_savefile_name(method, number = 1)
   savefile_name = "$(method)_savefile_$(number).jld"
   try
-    existing_save = open(savefile_name, "r")
+    jldopen(savefile_name, "r")
     savefile_name(method, number += 1)
   catch
     return savefile_name
   end
+end
+
+
+
+function existing_savefile_names(method, number = 1, savefile_names = [])
+  savefile_name = "$(method)_savefile_$(number).jld"
+  try
+    jldopen(savefile_name, "r")
+    push!(savefile_names, savefile_name)
+    return existing_savefile_names(method, number += 1, savefile_names)
+  catch
+    return savefile_names   
+  end
+end
+
+
+
+function all_existing_savefile_names()
+  existing_saves = []
+  for name in method_list
+    append!(existing_saves, existing_savefile_names(name))
+  end
+  return existing_saves
+end
+
+
+
+function optimize_all_algorithms()
+  for method in method_list
+    println(method)
+    @time optimize_suspension(method = method, 
+    max_n_evals = 320, 
+    weights = [0.5,0.5],
+    save = true
+    )
+  end
+end
+
+
+
+function generate_y_logs()
+  savefile_names = all_existing_savefile_names()
+  for name in savefile_names
+    savefile = jldopen(name, "w")
+    x_log = get(read(savefile), "x_log", "error")
+    weights = get(read(savefile), "weights", "error")
+    println(name, ": x_log length = ", length(x_log))
+    y_log = []
+    y_log_weighted = []
+    for i in 1:length(x_log)
+      println(i," / ", length(x_log))
+      push!(y_log, suspension_model_objective(x_log[i]))
+      push!(y_log_weighted, sum(y_log[i].*weights))
+    end
+    write(savefile, "y_log", y_log)
+    write(savefile, "y_log_weighted", y_log_weighted)
+    close(savefile)
+  end
+end
+
+
+
+function convergence_plot()
+  savefile_names = all_existing_savefile_names()
+  fig = figure()
+  ax = fig.subplots()
+  ax.set_title("Convergence Plot, All Algorithms")
+  ax.set_xlabel("Number of Function Evaluations")
+  ax.set_ylabel("Weighted Objective Value")
+  legend = ()
+  line_styles = ["-","--"]
+  for i in 1:length(savefile_names)
+    savefile = jldopen(savefile_names[i], "r")
+    method = get(read(savefile), "method", "error")
+    weights = get(read(savefile), "weights", "error")
+    evals_log = get(read(savefile), "evals_log", "error")
+    y_log_weighted = get(read(savefile), "y_log_weighted", "error")
+
+    line_color = 0.5*(i/length(savefile_names) + 1)
+    ax.plot(evals_log, y_log_weighted, 
+            color = (line_color, line_color, line_color), 
+            linestyle = line_styles[mod(i+1, 2)+1])
+    legend = (legend..., "$(method), weights = $(weights)")
+  end
+  ax.legend(legend)
 end
