@@ -225,7 +225,7 @@ end
 
 
 function new_savefile_name(method, number = 1)
-  savefile_name = "$(method)_savefile_$(number).jld"
+  savefile_name = "savefiles/$(method)_savefile_$(number).jld"
   try
     open_file = open(savefile_name)
     close(open_file)
@@ -238,7 +238,7 @@ end
 
 
 function existing_savefile_names(method, number = 1, savefile_names = [])
-  savefile_name = "$(method)_savefile_$(number).jld"
+  savefile_name = "savefiles/$(method)_savefile_$(number).jld"
   try
     open_file = open(savefile_name)
     close(open_file)
@@ -307,33 +307,42 @@ end
 
 function convergence_plot()
   savefile_names = all_existing_savefile_names()
-  fig = figure()
-  ax = fig.subplots()
-  ax.set_title("Convergence Plot, All Algorithms")
-  ax.set_xlabel("Number of Function Evaluations")
-  ax.set_ylabel("Weighted Objective Value")
-  legend = ()
-  line_styles = ["-","--"]
-  for i in 1:length(savefile_names)
-    savefile = jldopen(savefile_names[i], "r")
-    method = get(read(savefile), "method", "error")
-    weights = get(read(savefile), "weights", "error")
-    evals_log = get(read(savefile), "evals_log", "error")
-    y_log_weighted = get(read(savefile), "y_log_weighted", "error")
-    close(savefile)
+  for j = 1:3
+    fig = figure(j)
+    ax = fig.subplots()
+    legend = ()
+    line_styles = ["-","--","-.",":"]
+    for i in 1:length(savefile_names)
+      if !occursin("$(j)", savefile_names[i])
+        continue
+      end
+      savefile = jldopen(savefile_names[i], "r")
+      method = get(read(savefile), "method", "error")
+      weights = get(read(savefile), "weights", "error")
+      evals_log = get(read(savefile), "evals_log", "error")
+      y_log_weighted = get(read(savefile), "y_log_weighted", "error")
+      close(savefile)
 
-    line_color = 0.5*(1-i/length(savefile_names))
-    ax.plot(evals_log, y_log_weighted, 
-            color = (line_color, line_color, line_color), 
-            linestyle = line_styles[mod(i+1, 2)+1])
-    legend = (legend..., "$(method), weights = $(weights)")
+      line_color = 0.5*(1-i/length(savefile_names))
+      ax.plot(evals_log, y_log_weighted, 
+              color = (line_color, line_color, line_color), 
+              linestyle = line_styles[mod(i+1, 4)+1])
+      legend = (legend..., "$(method)")
+      ax.set_title("Convergence Plot, Weights = $(weights)")
+    end
+    ax.set_xlabel("Number of Function Evaluations")
+    ax.set_ylabel("Weighted Objective Value")
+    ax.legend(legend)
   end
-  ax.legend(legend)
 end
 
 
 
-function print_best()
+best_results = Dict{String, Dict{String, Array{Array{Float64, 1}, 1}}}()
+
+
+
+function get_best()
   savefile_names = all_existing_savefile_names()
   for i in 1:length(savefile_names)
     savefile = jldopen(savefile_names[i], "r")
@@ -342,8 +351,34 @@ function print_best()
     x_best = get(read(savefile), "x_best", "error")
     y_best = get(read(savefile), "y_best", "error")
     close(savefile)
+    
+    method_dict_default = Dict{String, Array{Array{Float64, 1}, 1}}()
+
+    get!( get!(best_results, method, method_dict_default), "$(weights)", [x_best, y_best])
 
     println("Method: $(method) \nWeights: $(weights) \nx_best = $(x_best) \ny_best = [ground following: $(y_best[1]), ride comfort: $(y_best[2])]\n\n")
-    # \nGround Following (mean distance from tire to ground): $(y_best[1]) \nRide Comfort (RMS vertical acceleration of bike frame): $(y_best[2])\n\n")
   end
+end
+
+function rank_algorithms()
+  all_weights = [[1.0, 0.0], [0.5, 0.5], [0.0, 1.0]]
+  sorted_methods = Dict{String, Array{String, 1}}()
+  for weights in all_weights
+    y_best_list = []
+    new_method_list = copy(method_list)
+    for i in 1:length(method_list)
+      method_y_best = get(get(best_results, method_list[i], "err"), 
+                          "$(weights)", "err")[2]
+      method_y_best_weighted = sum(method_y_best.*weights)
+      push!(y_best_list, method_y_best_weighted)
+      new_method_list[i] = "$(new_method_list[i]), $(method_y_best) => $(method_y_best_weighted)"
+    end
+    temp_sorted_methods = new_method_list[sortperm(y_best_list)]
+    get!(sorted_methods, "$(weights)", temp_sorted_methods)
+    println("weights = ", weights)
+    for j = 1:length(temp_sorted_methods)
+      println("  ", temp_sorted_methods[j])
+    end
+  end
+  return sorted_methods
 end
