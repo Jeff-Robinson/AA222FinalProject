@@ -360,7 +360,12 @@ function get_best()
   end
 end
 
+
+
 function rank_algorithms()
+  if !haskey(best_results, method_list[1])
+    get_best()
+  end
   all_weights = [[1.0, 0.0], [0.5, 0.5], [0.0, 1.0]]
   sorted_methods = Dict{String, Array{String, 1}}()
   for weights in all_weights
