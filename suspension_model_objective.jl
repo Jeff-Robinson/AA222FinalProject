@@ -5,6 +5,8 @@ using Distributions
 # using DifferentialEquations
 using OrdinaryDiffEq
 using PyPlot
+using PyCall
+PyCall.PyDict(matplotlib."rcParams")["mathtext.fontset"] = "cm"
 using Statistics
 
 default_inputs = (state_vec = [6.0, 20.0, 1.0, 1.0, 1.0, 1.0, 2.0, -2.0],
@@ -17,7 +19,8 @@ m2 = 5.0, # [kg]
 x_vel = 5.0, # [m/s], horizontal velocity
 time_lim = 10.0, # [s], real time per Simulation
 num_sims = 20, # number of iterations to average objectives over
-plotting = false
+plotting = false,
+which_plot = 20
 )
 
 
@@ -52,6 +55,7 @@ Runs a phsyical simulation of a suspended bicycle wheel traversing rough ground 
   `time_lim::Float64` -> duration of simulation, [s], default: 30.0\n
   `num_sims::Integer` -> number of iterations to average objectives, default: 10\n
   `plotting::Bool` -> whether to generate plots from a single simulation run or generate averaged objective values over several simulations, default: false
+  `which_plot::Integer` -> which simulation run, out of `num_sims`, to plot if `plotting == true`
 
 """
 function suspension_model_objective(
@@ -64,7 +68,8 @@ function suspension_model_objective(
   x_vel::Float64 = default_inputs.x_vel, # [m/s], horizontal velocity
   time_lim::Float64 = default_inputs.time_lim, # [s], real time per Simulation
   num_sims::Integer = default_inputs.num_sims, # number of iterations to average objectives over
-  plotting::Bool = default_inputs.plotting
+  plotting::Bool = default_inputs.plotting,
+  which_plot::Integer = default_inputs.which_plot
 )
 
 state_vec = state_vec.*default_inputs.state_orders
@@ -114,7 +119,7 @@ Calculates the spring constant of the tire as a function of tire displacement. U
 
 """
 function k_2(k2_0, x2)
-  ramp_strength = 0.1
+  # ramp_strength = 0.1
   # k2 = k2_0 * ( 0.5*(tanh(100*(1 - x2)) + 1) - ramp_strength*(log10(x2) + 0.2*x2) )
   k2 = k2_0 * ( 0.5*(tanh(100*(1 - x2)) + 1) + exp(-ramp*x2) )
   return k2
@@ -146,7 +151,6 @@ function sm_pw_damp_coeff(
   ẏ
   )
   steepness = 100.0
-  # ϵ = 1e-6
   A1 = (bCL - bCH)/2.0
   r1 = ẏcritC
   c1 = bCH + A1
@@ -269,7 +273,7 @@ for i = 1:num_sims
 
   # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Euler();dt=dtime) # Requires 0.0001 sec time step
   Suspension_Sim_Sols = solve(Suspension_Sim_Prob,DP5())
-  if plotting && i == num_sims
+  if plotting && i == which_plot
     push!(sols, Suspension_Sim_Sols)
   end
   # Suspension_Sim_Sols = solve(Suspension_Sim_Prob,Tsit5())
@@ -305,77 +309,92 @@ if plotting
   x1 = ((Suspension_Sim_Sols[3,:] .- Suspension_Sim_Sols[2,:]) .- travel_zero_point)/susp_travel
   x2 = (Suspension_Sim_Sols[2,:] .- Suspension_Sim_Sols[1,:])./tire_thk
 
+
+  motion_rates = [Suspension_Sim_Sols[5,i]-Suspension_Sim_Sols[4,i] for i =
+                  1:length(times)]
+  y_dots = [i for i in min(1.5*y_dotcritC, minimum(motion_rates)):0.01:max(1.5*y_dotcritR, maximum(motion_rates))]
+  b1s = [sm_pw_damp_coeff(bRH, bRL, bCL, bCH, y_dotcritR, y_dotcritC, y_dot) 
+         for y_dot in y_dots ]
   fig1 = figure(0)
-  # (ax1, ax2, ax3) = fig1.subplots(nrows=3, ncols=1)
   ax3 = fig1.subplots()
-  # ax1.plot(times,Suspension_Sim_Sols[4,:])
-  # ax1.set_title("Wheel Motion Rate, [m/s]")
-  # ax2.plot(times,Suspension_Sim_Sols[5,:])
-  # ax2.set_title("Bicycle Motion Rate, [m/s]")
-  ax3.plot(times, Suspension_Sim_Sols[5,:]-Suspension_Sim_Sols[4,:],
-          color = (0.4,0.4,0.4))
+  ax3.plot(times, motion_rates,
+          color = (0.5,0.5,0.5))
+  ax3.plot(b1s/1000, y_dots, 
+          color = (0,0,0), 
+          linestyle = "-", 
+          label = L"\mathrm{Damping\ Coefficients\ (x\ axis)}")
   Clim = ax3.plot(times, fill(params[12],length(times)), 
-                  color = (0,0,0), linestyle = "--", label = "High/Low Speed Compression Crossover")
+                  color = (0,0,0), 
+                  linestyle = "--", 
+                  label = L"\mathrm{High/Low\ Speed\ Compression\ Crossover}")
   Rlim = ax3.plot(times, fill(params[11],length(times)), 
-                  color = (0,0,0), linestyle = ":", label = "High/Low Speed Rebound Crossover")
-  ax3.set_title("Net Suspension Motion Rate, [m/s]")
-  ax3.set_xlabel("Time, [s]")
-  ax3.legend()
+                  color = (0,0,0), 
+                  linestyle = ":", 
+                  label = L"\mathrm{High/Low\ Speed\ Rebound\ Crossover}")
+  ax3.set_title(L"\mathrm{Net\ Suspension\ Motion\ Rate,\ [m/s]}")
+  ax3.set_xlabel(L"\mathrm{Time,\ [s]\ /\ Damping\ Coefficient,\ [kN-s/m]}")
+  xtick_locs = [i for i = 0:2:time_lim]
+  ax3.set(xticks=xtick_locs, 
+  xticklabels=["\$$(xtick)\$" for xtick in xtick_locs])
+  ytick_locs = [i for i = round(y_dots[1]):1:round(y_dots[end])]
+  ax3.set(yticks=ytick_locs, 
+  yticklabels=["\$$(ytick)\$" for ytick in ytick_locs])
+  ax3.legend(loc = 4, frameon=false)
 
   fig2 = figure(1)
   ax4 = fig2.subplots()
-  display_time = 60 # [s]
-  # display_pts = Integer(round(display_time/dtime))
-  display_pts = findall(times .<= display_time)
+  display_time = (7,time_lim) # [s]
+  display_pts = findall([times[i] >= display_time[1] &&
+                         times[i] <= display_time[2] for i = 1:length(times)])
   ax4.plot(times[display_pts]*x_vel,
           Suspension_Sim_Sols[1,display_pts], 
-          color = (0.7,0.7,0.7))
+          color = (0.7,0.7,0.7),
+          label = L"\mathrm{Ground}")
   ax4.plot(times[display_pts]*x_vel,
           Suspension_Sim_Sols[2,display_pts], 
-          color = (0.4,0.4,0.4))
+          color = (0.4,0.4,0.4),
+          label = L"\mathrm{Wheel}")
   ax4.plot(times[display_pts]*x_vel,
           Suspension_Sim_Sols[3,display_pts],
-          color = (0,0,0))
-  ax4.set_title("Ground, Wheel, and Frame Position")
-  ax4.set_xlabel("Distance, [m]")
-  ax4.set_ylabel("Altitude, [m]")
-  ax4.legend(("Ground","Wheel","Frame"))
+          color = (0,0,0),
+          label = L"\mathrm{Frame}")
+  ax4.set_title(L"\mathrm{Ground,\ Wheel,\ and\ Frame\ Position}")
+  ax4.set_xlabel(L"\mathrm{Distance,\ [m]}")
+  ax4.set_ylabel(L"\mathrm{Height,\ [m]}")
   ax4.axis("equal")
+  xtick_locs = [i for i = round(times[display_pts[1]])*x_vel:5:round(times[display_pts[end]])*x_vel]
+  ax4.set(xticks=xtick_locs, 
+  xticklabels=["\$$(xtick)\$" for xtick in xtick_locs])
+  ytick_locs = [i for i = -4:1:0]
+  ax4.set(yticks=ytick_locs, 
+  yticklabels=["\$$(ytick)\$" for ytick in ytick_locs])
+  ax4.legend(loc = 2, frameon=false)
 
-  xs = [i for i in -1.5:0.01:2]
+  xs = [i for i in -1.5:0.01:2.5]
   k1s = [k_1(1.0, xval) for xval in xs ]
   k2s = [k_2(1.0, xval) for xval in xs ]
   fig3 = figure(2)
   ax5 = fig3.subplots()
-  ax5.plot(times, -x2, color = (0.8,0.8,0.8), linestyle = "-")
-  ax5.plot(times, -x1, color = (0.6,0.6,0.6), linestyle = "-")
-  ax5.set_title("Normalized Suspension Travel/Tire Displacement")
-  ax5.set_xlabel("Time, [s] / Spring Constant Multiplier, [nondim.]")
-  ax5.set_ylabel("Normalized Displacement")
-  ax5.plot(k2s, -xs, color = (0,0,0), linestyle = "--")
-  ax5.plot(k1s, -xs, color = (0,0,0), linestyle = "-")
+  ax5.set_title(L"\mathrm{Normalized\ Suspension\ Travel/Tire\ Displacement}")
+  ax5.set_xlabel(L"\mathrm{Time,\ [s]\ /\ Spring\ Constant\ Multiplier}")
+  ax5.set_ylabel(L"\mathrm{Normalized\ Displacement}")
+  ax5.plot(k1s, -xs, color = (0,0,0), linestyle = "-", zorder = 10,
+           label = L"\mathrm{Suspension\ Spring\ Constant\ Multiplier}\ k_{1_{mod}}/k_1\ \mathrm{(x\ axis)}")
+  ax5.plot(k2s, -xs, color = (0,0,0), linestyle = "--", zorder = 8,
+           label = L"\mathrm{Tire\ Spring\ Constant\ Multiplier}\ k_{2_{mod}}/k_2\ \mathrm{(x\ axis)}")
+  ax5.plot(times, -x1, color = (0.6,0.6,0.6), linestyle = "-", zorder = 6, 
+           label = L"\mathrm{Suspension\ Travel}\ x_1")
+  ax5.plot(times, -x2, color = (0.8,0.8,0.8), linestyle = "-", zorder = 4,
+           label = L"\mathrm{Tire\ Displacement}\ x_2")
   ax5.set_xlim((0,times[end]))
-  ax5.set_ylim((-2,1.5))
-  ax5.legend(("Tire Displacement","Suspension Travel","Tire Spring Constant Multiplier","Suspension Spring Constant Multiplier"))
-
-  # fig4 = figure(3)
-  # ax6 = fig4.subplots()
-  # display_time = 2.5 # [s]
-  # display_pts = Integer(round(display_time/dtime))
-  # ax6.plot(times[1:display_pts]*x_vel,
-  #         Suspension_Sim_Sols[1,1:display_pts], 
-  #         color = (0.7,0.7,0.7))
-  # ax6.plot(times[1:display_pts]*x_vel,
-  #         Suspension_Sim_Sols[2,1:display_pts], 
-  #         color = (0.4,0.4,0.4))
-  # ax6.plot(times[1:display_pts]*x_vel,
-  #         Suspension_Sim_Sols[3,1:display_pts],
-  #         color = (0,0,0))
-  # ax6.set_title("Ground, Wheel, and Frame Position")
-  # ax6.set_xlabel("Distance, [m]")
-  # ax6.set_ylabel("Altitude, [m]")
-  # ax6.legend(("Ground","Wheel","Frame"))
-  # ax6.axis("equal")
+  ax5.set_ylim((minimum(xs),maximum(xs)))
+  xtick_locs = [i for i = 0:2:time_lim]
+  ax5.set(xticks=xtick_locs, 
+  xticklabels=["\$$(xtick)\$" for xtick in xtick_locs])
+  ytick_locs = [i for i = minimum(xs):0.5:maximum(xs)]
+  ax5.set(yticks=ytick_locs, 
+  yticklabels=["\$$(ytick)\$" for ytick in ytick_locs])
+  ax5.legend(loc = 2, frameon=false)
 end
 
 return [ground_following_mean, ride_comfort_mean]
